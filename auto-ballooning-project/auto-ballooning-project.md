@@ -7,7 +7,7 @@ shipping version of QEMU**
 
 ## Thiết lập và khởi động sandbox chạy lab
 
-Cài đặt kvm theo hướng dẫn [tại đây](https://gist.github.com/nghianinhnb/427235c32dfda4ce1e57af8ac09d1b5d). Việc này để giả lập một số bài test
+Cài đặt kvm theo hướng dẫn [tại đây](../kvm/kvm.md). Việc này để giả lập một số bài test
 ví dụ như: `hot plug ram`, ...
 
 ### Kích hoạt nested virtualization:
@@ -184,6 +184,42 @@ Using API: QEMU 1.2.2
 Running hypervisor: QEMU 1.7.50
 ```
 
+### Cài đặt kernel có hỗ trợ auto-balloon
+
+Cài đặt các gói cần thiết
+
+```bash
+sudo apt update
+sudo apt install -y make gcc bc libncurses5-dev libncursesw5-dev
+```
+
+Tải và giải nén kernel source code vào `'/usr/src'`:
+
+```bash
+sudo mkdir -p /usr/src/linux-2.6
+wget --no-check-certificate -O linux-2.6.tar.gz https://repo.or.cz/linux-2.6/luiz-linux-2.6.git/snapshot/96a1a83759f875185a879cd9963b8183dc0ced57.tar.gz
+sudo tar -xvf linux-2.6.tar.gz -C /usr/src/linux-2.6 --strip-components=1
+```
+
+Tạo file cấu hình:
+
+```bash
+cd /usr/src/linux-2.6
+sudo make mrproper
+sudo make menuconfig
+```
+
+Bỏ bớt các module không dùng đến như ethernet, wifi, các driver,... để giảm thời gian build và tránh lỗi vì đây chỉ là máy ảo nên một số device không được giả lập gây lỗi khi cài Dùng
+phím điều hướng chọn `'<Save>'` để ghi ra file `'.config'` sau đó chọn
+`'<Exit>'`. Rồi tiến hành biên dịch:
+
+```bash
+sudo make
+sudo make modules
+sudo make modules_install
+sudo make install
+```
+
 
 ## Tạo môi trường lab
 
@@ -241,45 +277,10 @@ sudo virt-install --name=vm1 --vcpus=4 --ram=4096 --disk path=./vm1.img,size=8 -
 
 Sử dụng tổ hợp phím `'Ctrl + ]'` để thoát khỏi console của máy ảo.
 
-### Cài đặt kernel có hỗ trợ auto-balloon cho máy ảo
-
-Cài đặt các gói cần thiết
-
-```bash
-sudo apt update
-sudo apt install -y make gcc bc libncurses5-dev libncursesw5-dev
-```
-
-Tải và giải nén kernel source code vào `'/usr/src'`:
-
-```bash
-sudo mkdir -p /usr/src/linux-2.6
-wget --no-check-certificate -O linux-2.6.tar.gz https://repo.or.cz/linux-2.6/luiz-linux-2.6.git/snapshot/96a1a83759f875185a879cd9963b8183dc0ced57.tar.gz
-sudo tar -xvf linux-2.6.tar.gz -C /usr/src/linux-2.6 --strip-components=1
-```
-
-Tạo file cấu hình:
-
-```bash
-cd /usr/src/linux-2.6
-sudo make mrproper
-sudo make menuconfig
-```
-
-Bỏ bớt các module không dùng đến như ethernet, wifi, các driver,... để giảm thời gian build và tránh lỗi vì đây chỉ là máy ảo nên một số device không được giả lập gây lỗi khi cài Dùng
-phím điều hướng chọn `'<Save>'` để ghi ra file `'.config'` sau đó chọn
-`'<Exit>'`. Rồi tiến hành biên dịch:
-
-```bash
-sudo make
-sudo make modules
-sudo make modules_install
-sudo make install
-```
 
 ### Clone máy ảo đã cài đặt
 
-Tới đây đã setup máy ảo thành công. Tắt máy ảo này đi và clone ra một máy ảo nữa là vm2
+Tới đây đã setup thành công. Tắt máy ảo này đi và clone ra một máy ảo nữa là vm2
 
 ```bash
 sudo virsh shutdown vm1
