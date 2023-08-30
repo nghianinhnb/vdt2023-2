@@ -28,4 +28,8 @@ trên, thực hiện chức năng automatic ballooning, trả metric phục vụ
 
   - [ ] Xây dựng các cli bật tắt, tùy chỉnh auto ballooning, lấy metric
 
+- [ ] Benchmark khi chạy automatic balloon so với bình thường
+
+- [ ] Xây dựng giải pháp monitoring
+
 - [ ] Demo
