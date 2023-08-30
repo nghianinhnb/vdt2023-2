@@ -8,7 +8,7 @@ thường.
 Giao tiếp giữa driver ở máy khách và các device trên được thực hiện thông qua bộ nhớ 
 dùng chung sử dụng cấu trúc dữ liệu đặc biệt gọi là `'virtqueue'` thực chất là một bộ 
 đệm vòng mà mỗi phần tử của nó là một linked-list các `'vring_desc'` - là struct mô tả 
-một vùng nhớ.
+một vùng nhớ/vùng đệm.
 
 [writing_virtio_drivers](https://docs.kernel.org/driver-api/virtio/writing_virtio_drivers.html) 
 
@@ -44,7 +44,8 @@ next:
     flag is set. We chain unused descriptors via this, too.
 ```
 
-All the buffers the descriptors point to are allocated by the guest and used by the host either for reading or for writing but not for both.
+All the buffers the descriptors point to are allocated by the guest and 
+used by the host either for reading or for writing but not for both.
 
 ## <span style="color: #0070B3">struct</span> virtqueue
 
@@ -98,7 +99,13 @@ priv:
 
 **Description:**
 
-A note on num_free: with indirect buffers, each buffer needs one element in the queue, otherwise a buffer will need one element per sg element.
+A note on num_free: with indirect buffers, each buffer needs one 
+element in the queue, otherwise a buffer will need one element 
+per sg element.
 
-The callback function pointed by this struct is triggered when the device has consumed the buffers provided by the driver. More specifically, the trigger will be an interrupt issued by the hypervisor (see vring_interrupt()). Interrupt request handlers are registered for a virtqueue during the virtqueue setup process (transport-specific).
-
+The callback function pointed by this struct is triggered when 
+the device has consumed the buffers provided by the driver. More 
+specifically, the trigger will be an interrupt issued by the 
+hypervisor (see vring_interrupt()). Interrupt request handlers 
+are registered for a virtqueue during the virtqueue setup process 
+(transport-specific).
