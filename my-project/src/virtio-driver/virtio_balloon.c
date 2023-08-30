@@ -26,89 +26,98 @@
 #define VIRTIO_BALLOON_MSG_PRESSURE 1
 
 
+/**
+ * The struct virtio_balloon represents a balloon device in the VirtIO framework.
+ * 
+ * @device: The virtual device that the virtio_balloon is associated with.
+ * @message_virtqueue: A virtqueue is used for sending and receiving messages 
+ * between the host and guest in a virtualized environment.
+ * 
+ * @guest_pressure: Represents the pressure from the guest on the device
+ */
 struct virtio_balloon 
 {
-    struct virtio_device *vdev;
-    struct virtqueue *message_vq;
+    struct virtio_device *device;
+    struct virtqueue *message_virtqueue;
 
-    /* Message virtqueue */
     atomic_t guest_pressure;
 };
 
 
-static inline bool guest_under_pressure(const struct virtio_balloon *vb)
+static inline bool guest_under_pressure(const struct virtio_balloon *balloon)
 {
-	return atomic_read(&vb->guest_pressure) == 1;
+	return atomic_read(&balloon->guest_pressure);
 }
 
 
 static void vmpressure_event_handler(void *data, int level)
 {
-	struct virtio_balloon *vb = data;
+	struct virtio_balloon *balloon = data;
 
-	atomic_set(&vb->guest_pressure, 1);
-	wake_up(&vb->config_change);
+	atomic_set(&balloon->guest_pressure, 1);
+	// wake_up(&balloon->config_change);
 }
 
 
 static void virtio_balloon_recv_cb(struct virtqueue *vq)
 {
-    struct virtio_balloon *vb = vq->vdev->priv;
+    struct virtio_balloon *balloon = vq->device->priv;
     char *buf;
     unsigned int len;
 
-    while ((buf = virtqueue_get_buf(vb->vq, &len)) != NULL) {
+    while ((buf = virtqueue_get_buf(balloon->vq, &len)) != NULL) {
             /* process the received data */
     }
 }
 
 
-static int virtio_balloon_probe(struct virtio_device *vdev)
+static int virtio_balloon_probe(struct virtio_device *device)
 {
-    struct virtio_balloon *vb = NULL;
+    struct virtio_balloon *balloon = NULL;
 
     /* initialize device data */
-    vb = kzalloc(sizeof(struct virtio_balloon), GFP_KERNEL);
-    if (!vb)
+    balloon = kzalloc(sizeof(struct virtio_balloon), GFP_KERNEL);
+    if (!balloon)
             return -ENOMEM;
 
-    atomic_set(&vb->guest_pressure, 0);
+    atomic_set(&balloon->guest_pressure, 0);
+	/* end init device data */
 
-    /* the device has a single virtqueue */
-    vb->vq = virtio_find_single_vq(vdev, virtio_balloon_recv_cb, "input");
-    if (IS_ERR(vb->vq)) {
-            kfree(vb);
-            return PTR_ERR(vb->vq);
+    /* register virtqueues */
+    balloon->vq = virtio_find_single_vq(device, virtio_balloon_recv_cb, "input");
+    if (IS_ERR(balloon->vq)) {
+            kfree(balloon);
+            return PTR_ERR(balloon->vq);
 
     }
-    vdev->priv = vb;
+    device->priv = balloon;
 
     /* from this point on, the device can notify and get callbacks */
-    virtio_device_ready(vdev);
+    virtio_device_ready(device);
 
     return 0;
 }
 
 
-static void virtio_balloon_remove(struct virtio_device *vdev)
+static void virtio_balloon_remove(struct virtio_device *device)
 {
-    struct virtio_balloon *vb = vdev->priv;
+    struct virtio_balloon *balloon = device->priv;
 
     /*
         * disable vq interrupts: equivalent to
-        * vdev->config->reset(vdev)
+        * device->config->reset(device)
         */
-    virtio_reset_device(vdev);
+    virtio_reset_device(device);
 
     /* detach unused buffers */
-    while ((buf = virtqueue_detach_unused_buf(vb->vq)) != NULL) {
+    while ((buf = virtqueue_detach_unused_buf(balloon->vq)) != NULL) {
             kfree(buf);
     }
 
     /* remove virtqueues */
-    vdev->config->del_vqs(vdev);
+    device->config->del_vqs(device);
 
-    kfree(vb);
+    kfree(balloon);
 }
 
 

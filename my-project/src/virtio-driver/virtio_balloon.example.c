@@ -1,24 +1,3 @@
-/*
- * Virtio balloon implementation, inspired by Dor Laor and Marcelo
- * Tosatti's implementations.
- *
- *  Copyright 2008 Rusty Russell IBM Corporation
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- */
-
 #include <linux/types.h>
 #include <linux/virtio.h>
 #include <linux/virtio_balloon.h>
@@ -46,8 +25,8 @@
 
 struct virtio_balloon
 {
-	struct virtio_device *vdev;
-	struct virtqueue *inflate_vq, *deflate_vq, *stats_vq, *message_vq;
+	struct virtio_device *device;
+	struct virtqueue *inflate_vq, *deflate_vq, *stats_vq, *message_virtqueue;
 
 	/* Where the ballooning thread waits for config to change. */
 	wait_queue_head_t config_change;
@@ -112,14 +91,14 @@ static void tell_host_pressure(struct virtio_balloon *vb)
 
 	sg_init_one(&sg, &msg, sizeof(msg));
 
-	err = virtqueue_add_outbuf(vb->message_vq, &sg, 1, vb, GFP_KERNEL);
+	err = virtqueue_add_outbuf(vb->message_virtqueue, &sg, 1, vb, GFP_KERNEL);
 	if (err < 0) {
 		printk(KERN_WARNING "virtio-balloon: failed to send host message (%d)\n", err);
 		goto out;
 	}
-	virtqueue_kick(vb->message_vq);
+	virtqueue_kick(vb->message_virtqueue);
 
-	wait_event(vb->message_acked, virtqueue_get_buf(vb->message_vq, &len));
+	wait_event(vb->message_acked, virtqueue_get_buf(vb->message_virtqueue, &len));
 
 out:
 	atomic_set(&vb->guest_pressure, 0);
@@ -142,14 +121,14 @@ static struct page *balloon_pfn_to_page(u32 pfn)
 
 static void balloon_ack(struct virtqueue *vq)
 {
-	struct virtio_balloon *vb = vq->vdev->priv;
+	struct virtio_balloon *vb = vq->device->priv;
 
 	wake_up(&vb->acked);
 }
 
 static void message_ack(struct virtqueue *vq)
 {
-	struct virtio_balloon *vb = vq->vdev->priv;
+	struct virtio_balloon *vb = vq->device->priv;
 
 	wake_up(&vb->message_acked);
 }
@@ -198,7 +177,7 @@ static void fill_balloon(struct virtio_balloon *vb, size_t num)
 
 		page = balloon_page_enqueue(vb_dev_info);
 		if (!page) {
-			dev_info_ratelimited(&vb->vdev->dev,
+			dev_info_ratelimited(&vb->device->dev,
 					     "Out of puff! Can't get %u pages\n",
 					     VIRTIO_BALLOON_PAGES_PER_PAGE);
 			/* Sleep for at least 1/5 of a second before retry. */
@@ -248,7 +227,7 @@ static void leak_balloon(struct virtio_balloon *vb, size_t num)
 
 	/*
 	 * Note that if
-	 * virtio_has_feature(vdev, VIRTIO_BALLOON_F_MUST_TELL_HOST);
+	 * virtio_has_feature(device, VIRTIO_BALLOON_F_MUST_TELL_HOST);
 	 * is true, we *have* to do it in this order
 	 */
 	if (vb->num_pfns != 0)
@@ -298,7 +277,7 @@ static void update_balloon_stats(struct virtio_balloon *vb)
  */
 static void stats_request(struct virtqueue *vq)
 {
-	struct virtio_balloon *vb = vq->vdev->priv;
+	struct virtio_balloon *vb = vq->device->priv;
 
 	vb->need_stats_update = 1;
 	wake_up(&vb->config_change);
@@ -322,19 +301,28 @@ static void stats_handle_request(struct virtio_balloon *vb)
 	virtqueue_kick(vq);
 }
 
-static void virtballoon_changed(struct virtio_device *vdev)
+static void virtballoon_changed(struct virtio_device *device)
 {
-	struct virtio_balloon *vb = vdev->priv;
+	struct virtio_balloon *vb = device->priv;
 
 	wake_up(&vb->config_change);
 }
 
+/**
+ * The function calculates the difference between the target number of pages and the current number of
+ * pages in a virtio balloon device.
+ * 
+ * @param vb A pointer to a struct virtio_balloon object.
+ * 
+ * @return the difference between the target number of pages and the current number of pages in the
+ * virtio_balloon structure.
+ */
 static inline s64 towards_target(struct virtio_balloon *vb)
 {
 	__le32 v;
 	s64 target;
 
-	virtio_cread(vb->vdev, struct virtio_balloon_config, num_pages, &v);
+	virtio_cread(vb->device, struct virtio_balloon_config, num_pages, &v);
 
 	target = le32_to_cpu(v);
 	return target - vb->num_pages;
@@ -344,7 +332,7 @@ static void update_balloon_size(struct virtio_balloon *vb)
 {
 	__le32 actual = cpu_to_le32(vb->num_pages);
 
-	virtio_cwrite(vb->vdev, struct virtio_balloon_config, actual,
+	virtio_cwrite(vb->device, struct virtio_balloon_config, actual,
 		      &actual);
 }
 
@@ -378,6 +366,14 @@ static int balloon(void *_vballoon)
 	return 0;
 }
 
+/**
+ * The function "init_vqs" initializes the virtqueues for the virtio_balloon device, including the
+ * inflate, deflate, stats, and message virtqueues if supported.
+ * 
+ * @param vb A pointer to a struct virtio_balloon object.
+ * 
+ * @return an integer value.
+ */
 static int init_vqs(struct virtio_balloon *vb)
 {
 	struct virtqueue *vqs[4];
@@ -390,16 +386,16 @@ static int init_vqs(struct virtio_balloon *vb)
 	 * We expect two virtqueues: inflate and deflate, and
 	 * optionally stat and message.
 	 */
-	nvqs = 2 + virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_STATS_VQ) +
-		virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_MESSAGE_VQ);
-	err = vb->vdev->config->find_vqs(vb->vdev, nvqs, vqs, callbacks, names);
+	nvqs = 2 + virtio_has_feature(vb->device, VIRTIO_BALLOON_F_STATS_VQ) +
+		virtio_has_feature(vb->device, VIRTIO_BALLOON_F_MESSAGE_VQ);
+	err = vb->device->config->find_vqs(vb->device, nvqs, vqs, callbacks, names);
 	if (err)
 		return err;
 
 	idx = 0;
 	vb->inflate_vq = vqs[idx++];
 	vb->deflate_vq = vqs[idx++];
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_STATS_VQ)) {
+	if (virtio_has_feature(vb->device, VIRTIO_BALLOON_F_STATS_VQ)) {
 		struct scatterlist sg;
 		vb->stats_vq = vqs[idx++];
 
@@ -413,8 +409,8 @@ static int init_vqs(struct virtio_balloon *vb)
 			BUG();
 		virtqueue_kick(vb->stats_vq);
 	}
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_MESSAGE_VQ))
-		vb->message_vq = vqs[idx];
+	if (virtio_has_feature(vb->device, VIRTIO_BALLOON_F_MESSAGE_VQ))
+		vb->message_virtqueue = vqs[idx];
 
 	return 0;
 }
@@ -492,14 +488,14 @@ static const struct address_space_operations virtio_balloon_aops = {
 };
 #endif /* CONFIG_BALLOON_COMPACTION */
 
-static int virtballoon_probe(struct virtio_device *vdev)
+static int virtballoon_probe(struct virtio_device *device)
 {
 	struct virtio_balloon *vb;
 	struct address_space *vb_mapping;
 	struct balloon_dev_info *vb_devinfo;
 	int err;
 
-	vdev->priv = vb = kmalloc(sizeof(*vb), GFP_KERNEL);
+	device->priv = vb = kmalloc(sizeof(*vb), GFP_KERNEL);
 	if (!vb) {
 		err = -ENOMEM;
 		goto out;
@@ -510,7 +506,7 @@ static int virtballoon_probe(struct virtio_device *vdev)
 	init_waitqueue_head(&vb->config_change);
 	init_waitqueue_head(&vb->message_acked);
 	init_waitqueue_head(&vb->acked);
-	vb->vdev = vdev;
+	vb->device = device;
 	vb->need_stats_update = 0;
 	atomic_set(&vb->guest_pressure, 0);
 
@@ -539,7 +535,7 @@ static int virtballoon_probe(struct virtio_device *vdev)
 	if (err)
 		goto out_free_vb_mapping;
 
-	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_MESSAGE_VQ)) {
+	if (virtio_has_feature(vb->device, VIRTIO_BALLOON_F_MESSAGE_VQ)) {
 		err = vmpressure_register_kernel_event(NULL, vmpressure_event_handler, vb);
 		if (err)
 			goto out_free_vb_mapping;
@@ -555,7 +551,7 @@ static int virtballoon_probe(struct virtio_device *vdev)
 
 out_del_vqs:
 	/* FIXME: add vmpressure_deregister_kernel_event() */
-	vdev->config->del_vqs(vdev);
+	device->config->del_vqs(device);
 out_free_vb_mapping:
 	balloon_mapping_free(vb_mapping);
 out_free_vb_devinfo:
@@ -574,14 +570,14 @@ static void remove_common(struct virtio_balloon *vb)
 	update_balloon_size(vb);
 
 	/* Now we reset the device so we can clean up the queues. */
-	vb->vdev->config->reset(vb->vdev);
+	vb->device->config->reset(vb->device);
 
-	vb->vdev->config->del_vqs(vb->vdev);
+	vb->device->config->del_vqs(vb->device);
 }
 
-static void virtballoon_remove(struct virtio_device *vdev)
+static void virtballoon_remove(struct virtio_device *device)
 {
-	struct virtio_balloon *vb = vdev->priv;
+	struct virtio_balloon *vb = device->priv;
 
 	kthread_stop(vb->thread);
 	remove_common(vb);
@@ -591,9 +587,16 @@ static void virtballoon_remove(struct virtio_device *vdev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int virtballoon_freeze(struct virtio_device *vdev)
+/**
+ * The virtballoon_freeze function removes the virtio_balloon device and returns 0.
+ * 
+ * @param device A pointer to a struct virtio_device, which represents a VirtIO device.
+ * 
+ * @return 0.
+ */
+static int virtballoon_freeze(struct virtio_device *device)
 {
-	struct virtio_balloon *vb = vdev->priv;
+	struct virtio_balloon *vb = device->priv;
 
 	/*
 	 * The kthread is already frozen by the PM core before this
@@ -604,12 +607,20 @@ static int virtballoon_freeze(struct virtio_device *vdev)
 	return 0;
 }
 
-static int virtballoon_restore(struct virtio_device *vdev)
+/**
+ * The function virtballoon_restore initializes the virtual queues, fills the balloon with memory, and
+ * updates the balloon size.
+ * 
+ * @param device A pointer to a struct virtio_device, which represents a VirtIO device.
+ * 
+ * @return an integer value.
+ */
+static int virtballoon_restore(struct virtio_device *device)
 {
-	struct virtio_balloon *vb = vdev->priv;
+	struct virtio_balloon *vb = device->priv;
 	int ret;
 
-	ret = init_vqs(vdev->priv);
+	ret = init_vqs(device->priv);
 	if (ret)
 		return ret;
 
