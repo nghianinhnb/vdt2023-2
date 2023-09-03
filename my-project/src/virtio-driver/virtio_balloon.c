@@ -31,7 +31,7 @@
 struct virtio_balloon 
 {
     struct virtio_device *vdev;
-    struct virtqueue *message_virtqueue, stats_virtqueue;
+    struct virtqueue *message_virtqueue, *stats_virtqueue;
 
     /* Where the ballooning thread waits for config to change. */
 	wait_queue_head_t config_change;
@@ -156,6 +156,27 @@ static void virtballoon_changed(struct virtio_device *vdev)
 // *** End Driver Func ***
 
 
+// *** Comunication Func ***
+static void send_to_host(struct virtqueue *vq, void *message, wait_queue_head_t ack)
+{
+	struct scatterlist sg;
+	unsigned int len;
+
+	if (!virtqueue_get_buf(vq, &len)) return;
+
+	sg_init_one(&sg, message, sizeof(message));
+
+    struct virtio_balloon *vb = vq->vdev->priv;
+
+	if (virtqueue_add_outbuf(vq, &sg, 1, vb, GFP_KERNEL) < 0) BUG();
+    // notify host
+	virtqueue_kick(vq);
+
+    wait_event(ack, virtqueue_get_buf(vq, &len));
+}
+// *** End Comunication Func ***
+
+
 // *** Page Utils ***
 static struct page *balloon_pfn_to_page(u32 pfn)
 {
@@ -187,21 +208,6 @@ static inline void write_stat_to_balloon(struct virtio_balloon *vb, int idx,
 
 #define pages_to_bytes(x) ((u64)(x) << PAGE_SHIFT)
 
-static void send_stats_to_host(struct virtio_balloon *vb)
-{
-	struct virtqueue *vq;
-	struct scatterlist sg;
-	unsigned int len;
-
-	vq = vb->stats_virtqueue;
-	if (!virtqueue_get_buf(vq, &len))
-		return;
-	sg_init_one(&sg, vb->stats, sizeof(vb->stats));
-	if (virtqueue_add_outbuf(vq, &sg, 1, vb, GFP_KERNEL) < 0)
-		BUG();
-	virtqueue_kick(vq);
-}
-
 static void update_stats(struct virtio_balloon *vb)
 {
 	struct sysinfo i;
@@ -214,6 +220,6 @@ static void update_stats(struct virtio_balloon *vb)
 	write_stat_to_balloon(vb, idx++, VIRTIO_BALLOON_S_MEMTOT,
 				pages_to_bytes(i.totalram));
 
-	send_stats_to_host(vb);
+    send_to_host(vb->stats_virtqueue, vb->stats, NULL);
 }
 // *** End Update Stats ***

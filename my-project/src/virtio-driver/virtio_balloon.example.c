@@ -59,57 +59,11 @@ struct virtio_balloon
 
 
 static inline bool guest_under_pressure(const struct virtio_balloon *vb){}
-
 static void vmpressure_event_handler(void *data, int level){}
-
-static void tell_host_pressure(struct virtio_balloon *vb)
-{
-	const uint32_t msg = VIRTIO_BALLOON_MSG_PRESSURE;
-	struct scatterlist sg;
-	unsigned int len;
-	int err;
-
-	sg_init_one(&sg, &msg, sizeof(msg));
-
-	err = virtqueue_add_outbuf(vb->message_virtqueue, &sg, 1, vb, GFP_KERNEL);
-	if (err < 0) {
-		printk(KERN_WARNING "virtio-balloon: failed to send host message (%d)\n", err);
-		atomic_set(&vb->guest_pressure, 0);
-	}
-	virtqueue_kick(vb->message_virtqueue);
-
-	wait_event(vb->message_acked, virtqueue_get_buf(vb->message_virtqueue, &len));
-}
-
-
-static void balloon_ack(struct virtqueue *vq)
-{
-	struct virtio_balloon *vb = vq->vdev->priv;
-	wake_up(&vb->acked);
-}
-
-static void message_ack(struct virtqueue *vq)
-{
-	struct virtio_balloon *vb = vq->vdev->priv;
-	wake_up(&vb->message_acked);
-}
-
-static void tell_host(struct virtio_balloon *vb, struct virtqueue *vq)
-{
-	struct scatterlist sg;
-	unsigned int len;
-
-	sg_init_one(&sg, vb->pfns, sizeof(vb->pfns[0]) * vb->num_pfns);
-
-	/* We should always be able to add one buffer to an empty queue. */
-	if (virtqueue_add_outbuf(vq, &sg, 1, vb, GFP_KERNEL) < 0)
-		BUG();
-	virtqueue_kick(vq);
-
-	/* When host has read buffer, this completes via balloon_ack */
-	wait_event(vb->acked, virtqueue_get_buf(vq, &len));
-}
-
+static void tell_host_pressure(struct virtio_balloon *vb){}
+static void balloon_ack(struct virtqueue *vq){}
+static void message_ack(struct virtqueue *vq){}
+static void tell_host(struct virtio_balloon *vb, struct virtqueue *vq){}
 
 /**
  * The function "fill_balloon" fills a balloon device with a specified number of pages, while ensuring
@@ -197,21 +151,8 @@ static void leak_balloon(struct virtio_balloon *vb, size_t num)
 
 static void update_stats(struct virtio_balloon *vb){}
 
-/*
- * While most virtqueues communicate guest-initiated requests to the hypervisor,
- * the stats queue operates in reverse.  The driver initializes the virtqueue
- * with a single buffer.  From that point forward, all conversations consist of
- * a hypervisor request (a call to this function) which directs us to refill
- * the virtqueue with a fresh stats buffer.  Since stats collection can sleep,
- * we notify our kthread which does the actual work via send_stats_to_host().
- */
-static void stats_request(struct virtqueue *vq)
-{
-	struct virtio_balloon *vb = vq->vdev->priv;
 
-	vb->need_stats_update = 1;
-	wake_up(&vb->config_change);
-}
+static void stats_request(struct virtqueue *vq){}
 
 static void send_stats_to_host(struct virtio_balloon *vb){}
 

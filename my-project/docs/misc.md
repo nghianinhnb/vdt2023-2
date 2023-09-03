@@ -41,3 +41,7 @@ toàn cho phép tính bằng chục phút.
 
 Có cần chú ý đến việc phân mảnh trên ram?
 có thể chống phân mảnh trên đống ram được nhận để khi trả lại trả các vùng lớn nhất có thể
+
+Máy chủ lấy stats thế nào?
+khi máy chủ nhận được thông tin stats thì ghi ra stdout, việc còn lại để các component
+khác thu thập và xử lý
