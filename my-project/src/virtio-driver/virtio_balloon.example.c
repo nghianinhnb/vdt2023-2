@@ -1,6 +1,5 @@
 #include <linux/types.h>
 #include <linux/virtio.h>
-#include <linux/virtio_balloon.h>
 #include <linux/swap.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
@@ -8,18 +7,16 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/balloon_compaction.h>
-
 #include <linux/cgroup.h>
 #include <linux/vmpressure.h>
 
+#include <linux/balloon_utils.h>
+#include <linux/virtio_balloon.h>
 
-/*
- * Balloon vdev works in 4K page units. So each page is pointed to by
- * multiple balloon pages.  All memory counters in this driver are in balloon
- * page units.
- */
-#define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
-#define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
+//dev
+#include <balloon_utils.h>
+#include <virtio_balloon.h>
+
 
 #define VIRTIO_BALLOON_MSG_PRESSURE 1
 
@@ -101,12 +98,6 @@ out:
 }
 
 
-static struct page *balloon_pfn_to_page(u32 pfn)
-{
-	BUG_ON(pfn % VIRTIO_BALLOON_PAGES_PER_PAGE);
-	return pfn_to_page(pfn / VIRTIO_BALLOON_PAGES_PER_PAGE);
-}
-
 static void balloon_ack(struct virtqueue *vq)
 {
 	struct virtio_balloon *vb = vq->vdev->priv;
@@ -137,7 +128,6 @@ static void tell_host(struct virtio_balloon *vb, struct virtqueue *vq)
 	wait_event(vb->acked, virtqueue_get_buf(vq, &len));
 }
 
-static void add_page_to_balloon_pfns(u32 pfns[], struct page *page){}
 
 /**
  * The function "fill_balloon" fills a balloon device with a specified number of pages, while ensuring

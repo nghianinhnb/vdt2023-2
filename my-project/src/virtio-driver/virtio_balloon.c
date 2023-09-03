@@ -1,27 +1,24 @@
-#include <linux/types.h>
-#include <linux/virtio.h>
-#include <linux/virtio_ids.h>
-#include <linux/virtio_balloon.h>
-#include <linux/virtio_config.h>
 #include <linux/swap.h>
+#include <linux/slab.h>
+#include <linux/types.h>
+#include <linux/delay.h>
+#include <linux/virtio.h>
+#include <linux/module.h>
+#include <linux/cgroup.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
-#include <linux/delay.h>
-#include <linux/slab.h>
-#include <linux/module.h>
+#include <linux/virtio_ids.h>
+#include <linux/vmpressure.h>
+#include <linux/virtio_config.h>
 #include <linux/balloon_compaction.h>
 
-#include <linux/cgroup.h>
-#include <linux/vmpressure.h>
+#include <linux/balloon_utils.h>
+#include <linux/virtio_balloon.h>
 
+//dev
+#include <balloon_utils.h>
+#include <virtio_balloon.h>
 
-/*
- * Balloon vdev works in 4K page units.  So each page is pointed to by
- * multiple balloon pages.  All memory counters in this driver are in balloon
- * page units.
- */
-#define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
-#define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
 
 #define VIRTIO_BALLOON_MSG_PRESSURE 1
 

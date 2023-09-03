@@ -1,14 +1,10 @@
 #include <linux/virtio_balloon.h>
 #include <linux/balloon_compaction.h>
 
+#include <linux/balloon_utils.h>
 
-/*
- * Balloon device works in 4K page units. So each page is pointed to by
- * multiple balloon pages.  All memory counters in this driver are in balloon
- * page units.
- */
-#define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
-#define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
+//dev
+#include <balloon_utils.h>
 
 
 static struct page *balloon_pfn_to_page(u32 pfn)
