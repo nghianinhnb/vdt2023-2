@@ -10,11 +10,7 @@
 #include <linux/cgroup.h>
 #include <linux/vmpressure.h>
 
-#include <linux/balloon_utils.h>
-#include <linux/virtio_balloon.h>
-
-//dev
-#include <balloon_utils.h>
+#include <dev>
 #include <virtio_balloon.h>
 
 
@@ -23,7 +19,7 @@
 struct virtio_balloon
 {
 	struct virtio_device *vdev;
-	struct virtqueue *inflate_vq, *deflate_vq, *stats_vq, *message_virtqueue;
+	struct virtqueue *inflate_vq, *deflate_vq, *stats_virtqueue, *message_virtqueue;
 
 	/* Where the ballooning thread waits for config to change. */
 	wait_queue_head_t config_change;
@@ -62,18 +58,9 @@ struct virtio_balloon
 };
 
 
-static inline bool guest_under_pressure(const struct virtio_balloon *vb)
-{
-	return atomic_read(&vb->guest_pressure) == 1;
-}
+static inline bool guest_under_pressure(const struct virtio_balloon *vb){}
 
-static void vmpressure_event_handler(void *data, int level)
-{
-	struct virtio_balloon *vb = data;
-
-	atomic_set(&vb->guest_pressure, 1);
-	wake_up(&vb->config_change);
-}
+static void vmpressure_event_handler(void *data, int level){}
 
 static void tell_host_pressure(struct virtio_balloon *vb)
 {
@@ -87,28 +74,23 @@ static void tell_host_pressure(struct virtio_balloon *vb)
 	err = virtqueue_add_outbuf(vb->message_virtqueue, &sg, 1, vb, GFP_KERNEL);
 	if (err < 0) {
 		printk(KERN_WARNING "virtio-balloon: failed to send host message (%d)\n", err);
-		goto out;
+		atomic_set(&vb->guest_pressure, 0);
 	}
 	virtqueue_kick(vb->message_virtqueue);
 
 	wait_event(vb->message_acked, virtqueue_get_buf(vb->message_virtqueue, &len));
-
-out:
-	atomic_set(&vb->guest_pressure, 0);
 }
 
 
 static void balloon_ack(struct virtqueue *vq)
 {
 	struct virtio_balloon *vb = vq->vdev->priv;
-
 	wake_up(&vb->acked);
 }
 
 static void message_ack(struct virtqueue *vq)
 {
 	struct virtio_balloon *vb = vq->vdev->priv;
-
 	wake_up(&vb->message_acked);
 }
 
@@ -213,36 +195,7 @@ static void leak_balloon(struct virtio_balloon *vb, size_t num)
 	release_pages_by_pfn(vb->pfns, vb->num_pfns);
 }
 
-static inline void update_stat(struct virtio_balloon *vb, int idx,
-			       u16 tag, u64 val)
-{
-	BUG_ON(idx >= VIRTIO_BALLOON_S_NR);
-	vb->stats[idx].tag = tag;
-	vb->stats[idx].val = val;
-}
-
-#define pages_to_bytes(x) ((u64)(x) << PAGE_SHIFT)
-
-static void update_balloon_stats(struct virtio_balloon *vb)
-{
-	unsigned long events[NR_VM_EVENT_ITEMS];
-	struct sysinfo i;
-	int idx = 0;
-
-	all_vm_events(events);
-	si_meminfo(&i);
-
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_SWAP_IN,
-				pages_to_bytes(events[PSWPIN]));
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_SWAP_OUT,
-				pages_to_bytes(events[PSWPOUT]));
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_MAJFLT, events[PGMAJFAULT]);
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_MINFLT, events[PGFAULT]);
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_MEMFREE,
-				pages_to_bytes(i.freeram));
-	update_stat(vb, idx++, VIRTIO_BALLOON_S_MEMTOT,
-				pages_to_bytes(i.totalram));
-}
+static void update_stats(struct virtio_balloon *vb){}
 
 /*
  * While most virtqueues communicate guest-initiated requests to the hypervisor,
@@ -250,7 +203,7 @@ static void update_balloon_stats(struct virtio_balloon *vb)
  * with a single buffer.  From that point forward, all conversations consist of
  * a hypervisor request (a call to this function) which directs us to refill
  * the virtqueue with a fresh stats buffer.  Since stats collection can sleep,
- * we notify our kthread which does the actual work via stats_handle_request().
+ * we notify our kthread which does the actual work via send_stats_to_host().
  */
 static void stats_request(struct virtqueue *vq)
 {
@@ -260,39 +213,11 @@ static void stats_request(struct virtqueue *vq)
 	wake_up(&vb->config_change);
 }
 
-static void stats_handle_request(struct virtio_balloon *vb)
-{
-	struct virtqueue *vq;
-	struct scatterlist sg;
-	unsigned int len;
-
-	vb->need_stats_update = 0;
-	update_balloon_stats(vb);
-
-	vq = vb->stats_vq;
-	if (!virtqueue_get_buf(vq, &len))
-		return;
-	sg_init_one(&sg, vb->stats, sizeof(vb->stats));
-	if (virtqueue_add_outbuf(vq, &sg, 1, vb, GFP_KERNEL) < 0)
-		BUG();
-	virtqueue_kick(vq);
-}
-
-static void virtballoon_changed(struct virtio_device *vdev)
-{
-	struct virtio_balloon *vb = vdev->priv;
-
-	wake_up(&vb->config_change);
-}
+static void send_stats_to_host(struct virtio_balloon *vb){}
 
 /**
  * The function calculates the difference between the target number of pages and the current number of
  * pages in a virtio balloon vdev.
- * 
- * @param vb A pointer to a struct virtio_balloon object.
- * 
- * @return the difference between the target number of pages and the current number of pages in the
- * virtio_balloon structure.
  */
 static inline s64 towards_target(struct virtio_balloon *vb)
 {
@@ -338,7 +263,7 @@ static int balloon(void *_vballoon)
 					 || kthread_should_stop()
 					 || freezing(current));
 		if (vb->need_stats_update)
-			stats_handle_request(vb);
+			send_stats_to_host(vb);
 		if (diff > 0)
 			fill_balloon(vb, diff);
 		else if (diff < 0)
@@ -383,17 +308,17 @@ static int init_vqs(struct virtio_balloon *vb)
 	vb->deflate_vq = vqs[idx++];
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_STATS_VQ)) {
 		struct scatterlist sg;
-		vb->stats_vq = vqs[idx++];
+		vb->stats_virtqueue = vqs[idx++];
 
 		/*
 		 * Prime this virtqueue with one buffer so the hypervisor can
 		 * use it to signal us later.
 		 */
 		sg_init_one(&sg, vb->stats, sizeof vb->stats);
-		if (virtqueue_add_outbuf(vb->stats_vq, &sg, 1, vb, GFP_KERNEL)
+		if (virtqueue_add_outbuf(vb->stats_virtqueue, &sg, 1, vb, GFP_KERNEL)
 		    < 0)
 			BUG();
-		virtqueue_kick(vb->stats_vq);
+		virtqueue_kick(vb->stats_virtqueue);
 	}
 	if (virtio_has_feature(vb->vdev, VIRTIO_BALLOON_F_MESSAGE_VQ))
 		vb->message_virtqueue = vqs[idx];
@@ -632,7 +557,6 @@ static struct virtio_driver virtio_balloon_driver = {
 	.id_table =	id_table,
 	.probe =	virtballoon_probe,
 	.remove =	virtballoon_remove,
-	.config_changed = virtballoon_changed,
 #ifdef CONFIG_PM_SLEEP
 	.freeze	=	virtballoon_freeze,
 	.restore =	virtballoon_restore,
