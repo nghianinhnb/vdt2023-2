@@ -13,8 +13,10 @@
 #include <dev>
 #include <virtio_balloon.h>
 
-
+#define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
+#define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
 #define VIRTIO_BALLOON_MSG_PRESSURE 1
+
 
 struct virtio_balloon
 {

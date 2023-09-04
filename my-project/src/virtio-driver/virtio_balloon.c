@@ -25,19 +25,20 @@
  * @vdev: The virtual vdev that the virtio_balloon is associated with.
  * @message_virtqueue: A virtqueue is used for sending and receiving messages 
  * between the host and guest in a virtualized environment.
+ * @stats_virtqueue: send memory statistics
  * 
  * @guest_pressure: Represents the pressure from the guest on the vdev
  */
 struct virtio_balloon 
 {
     struct virtio_device *vdev;
+    struct balloon_dev_info *dev_info;
     struct virtqueue *message_virtqueue, *stats_virtqueue;
 
     /* Where the ballooning thread waits for config to change. */
 	wait_queue_head_t config_change;
 
     /* Memory statistics */
-	int need_stats_update;
 	struct virtio_balloon_stat stats[VIRTIO_BALLOON_S_NR];
 
     atomic_t guest_pressure;
@@ -155,6 +156,19 @@ static void virtballoon_changed(struct virtio_device *vdev)
 }
 // *** End Driver Func ***
 
+// *** Balloon Func ***
+static void inflate_balloon(struct virtio_balloon *balloon){
+    struct page *new_page = balloon_page_alloc();
+
+    if (!new_page) return;
+
+    balloon_page_enqueue(balloon->dev_info, new_page);
+}
+
+static void deflate_balloon(struct virtio_balloon *balloon){
+    
+}
+// *** End Balloon Func ***
 
 // *** Comunication Func ***
 static void send_to_host(struct virtqueue *vq, void *message, wait_queue_head_t ack)
@@ -172,7 +186,7 @@ static void send_to_host(struct virtqueue *vq, void *message, wait_queue_head_t 
     // notify host
 	virtqueue_kick(vq);
 
-    wait_event(ack, virtqueue_get_buf(vq, &len));
+    if (ack) wait_event(ack, virtqueue_get_buf(vq, &len));
 }
 // *** End Comunication Func ***
 
