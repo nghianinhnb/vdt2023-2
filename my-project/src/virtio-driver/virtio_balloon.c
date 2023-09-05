@@ -16,6 +16,7 @@
 
 #define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
 #define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
+#define VIRTIO_BALLOON_PAGES_PER_32MB 32 * 1024 / 4
 #define VIRTIO_BALLOON_MSG_PRESSURE 1
 
 
@@ -32,32 +33,19 @@
 struct virtio_balloon 
 {
     struct virtio_device *vdev;
-    struct balloon_dev_info *dev_info;
-    struct virtqueue *message_virtqueue, *stats_virtqueue;
+    struct balloon_dev_info *b_dev_info;
+    struct virtqueue *message_virtqueue, *stats_virtqueue, *inflate_virtqueue, *deflate_virtqueue;
 
     /* Where the ballooning thread waits for config to change. */
 	wait_queue_head_t config_change;
 
+    // Number of balloon pages give to host
+    unsigned int num_pages;
+
     /* Memory statistics */
-	struct virtio_balloon_stat stats[VIRTIO_BALLOON_S_NR];
-
-    atomic_t guest_pressure;
+	__virtio64 stats[2];
+    float pressure;
 };
-
-
-static inline bool guest_under_pressure(const struct virtio_balloon *balloon)
-{
-	return atomic_read(&balloon->guest_pressure);
-}
-
-
-static void vmpressure_event_handler(void *data, int level)
-{
-	struct virtio_balloon *balloon = data;
-
-	atomic_set(&balloon->guest_pressure, 1);
-	wake_up(&balloon->config_change);
-}
 
 
 static void virtio_balloon_recv_cb(struct virtqueue *vq)
@@ -84,16 +72,15 @@ static int virtio_balloon_probe(struct virtio_device *vdev)
     vdev->priv = balloon;
     balloon->vdev = vdev;
 
-    atomic_set(&balloon->guest_pressure, 0);
 	/* end init vdev data */
 
     /* register virtqueues */
-    balloon->vq = virtio_find_single_vq(vdev, virtio_balloon_recv_cb, "input");
-    if (IS_ERR(balloon->vq)) {
-            kfree(balloon);
-            return PTR_ERR(balloon->vq);
+    // balloon->vq = virtio_find_single_vq(vdev, virtio_balloon_recv_cb, "input");
+    // if (IS_ERR(balloon->vq)) {
+    //         kfree(balloon);
+    //         return PTR_ERR(balloon->vq);
 
-    }
+    // }
 
     /* from this point on, the vdev can notify and get callbacks */
     virtio_device_ready(vdev);
@@ -148,25 +135,52 @@ MODULE_LICENSE("GPL");
 
 // ******************** UTILS ********************
 
-// *** Driver Func ***
-static void virtballoon_changed(struct virtio_device *vdev)
-{
-	struct virtio_balloon *vb = vdev->priv;
-	wake_up(&vb->config_change);
-}
-// *** End Driver Func ***
-
 // *** Balloon Func ***
+static int balloon(void *_vballoon)
+{
+	struct virtio_balloon *vb = _vballoon;
+
+	set_freezable();
+	while (!kthread_should_stop()) {
+        update_stats(vb);
+
+		try_to_freeze();
+        if (vb->pressure < 0.7) {
+            inflate_balloon(vb);
+        } else if (vb->pressure > 0.8) {
+            deflate_balloon(vb);
+        }
+
+        msleep(10000);
+	}
+	return 0;
+}
+
 static void inflate_balloon(struct virtio_balloon *balloon){
-    struct page *new_page = balloon_page_alloc();
+    unsigned int i;
+    struct list_head *pages;
+    INIT_LIST_HEAD(pages);
 
-    if (!new_page) return;
+    for (i=0 ; i<VIRTIO_BALLOON_PAGES_PER_32MB ; i++) {
+        struct page *balloon_page = balloon_page_alloc();
+        if (!balloon_page) break;
+        list_add_tail(balloon_page->lru, pages);
+    }
 
-    balloon_page_enqueue(balloon->dev_info, new_page);
+    size_t num_enqueued = balloon_page_list_enqueue(balloon->b_dev_info, pages);
+    if (!num_enqueued) return;
+    send_to_host(balloon->inflate_virtqueue, NULL, NULL);
+    balloon->num_pages += num_enqueued;
 }
 
 static void deflate_balloon(struct virtio_balloon *balloon){
-    
+    if (!balloon->num_pages) return;
+    struct list_head *pages;
+    INIT_LIST_HEAD(pages);
+    size_t num_dequeued = balloon_page_list_dequeue(balloon->b_dev_info, pages, VIRTIO_BALLOON_PAGES_PER_32MB);
+    if (!num_dequeued) return;
+    send_to_host(balloon->inflate_virtqueue, pages, NULL);
+    balloon->num_pages -= num_dequeued;
 }
 // *** End Balloon Func ***
 
@@ -213,26 +227,17 @@ static void add_page_to_balloon_pfns(u32 pfns[], struct page *page)
 
 
 // *** Update Stats ***
-static inline void write_stat_to_balloon(struct virtio_balloon *vb, int idx,
-			       u16 tag, u64 val)
-{
-	vb->stats[idx].tag = tag;
-	vb->stats[idx].val = val;
-}
-
 #define pages_to_bytes(x) ((u64)(x) << PAGE_SHIFT)
 
 static void update_stats(struct virtio_balloon *vb)
 {
 	struct sysinfo i;
-	int idx = 0;
 
 	si_meminfo(&i);
 
-	write_stat_to_balloon(vb, idx++, VIRTIO_BALLOON_S_MEMFREE,
-				pages_to_bytes(i.freeram));
-	write_stat_to_balloon(vb, idx++, VIRTIO_BALLOON_S_MEMTOT,
-				pages_to_bytes(i.totalram));
+    vb->stats[VIRTIO_BALLOON_S_MEMFREE] = pages_to_bytes(i.freeram);
+    vb->stats[VIRTIO_BALLOON_S_MEMTOT] = pages_to_bytes(i.totalram);
+    vb->pressure = vb->stats[VIRTIO_BALLOON_S_MEMFREE] / vb->stats[VIRTIO_BALLOON_S_MEMTOT];
 
     send_to_host(vb->stats_virtqueue, vb->stats, NULL);
 }

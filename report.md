@@ -8,7 +8,7 @@ chưa thành công do phiên bản quá cũ đã không còn hỗ trợ.
 
 ## Công việc tiếp theo
 
-- [ ] 08/09/2023 Xây dựng `virtIO balloon` driver. Là một module cung cấp các lời gọi hệ
+- [ ] **08/09** Xây dựng `virtIO balloon` driver. Là một module cung cấp các lời gọi hệ
 thống thực hiện theo dõi tải, tăng giảm bong bóng bộ nhớ, lấy các thông tin
 bộ nhớ phục vụ monitoring:
 
@@ -18,7 +18,7 @@ bộ nhớ phục vụ monitoring:
 
   - [ ] Tìm hiểu và xây dựng chức năng cung cấp metric phục vụ monitoring
 
-- [ ] 15/09/2023 Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
+- [ ] **15/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
 trên, thực hiện chức năng automatic ballooning, trả metric phục vụ monitoring
 
   - [ ] Tìm hiểu và xây dựng chức năng truyền nhận thông điệp báo tải máy khách,
@@ -28,10 +28,10 @@ trên, thực hiện chức năng automatic ballooning, trả metric phục vụ
 
   - [ ] Xây dựng các cli bật tắt, tùy chỉnh auto ballooning, lấy metric
 
-- [ ] 22/09/2023 Cài đặt và kết nối 2 chương trình trên
+- [ ] **22/09** Cài đặt và kết nối 2 chương trình trên
 
-- [ ] 27/09/2023 Benchmark khi chạy automatic balloon so với bình thường
+- [ ] **27/09** Benchmark khi chạy automatic balloon so với bình thường
 
-- [ ] 29/09/2023 Xây dựng giải pháp monitoring
+- [ ] **29/09** Xây dựng giải pháp monitoring
 
-- [ ] 03/10/2023 Slide + Demo
+- [ ] **03/10** Slide + Demo

@@ -9,6 +9,7 @@
 #include <linux/balloon_compaction.h>
 #include <linux/cgroup.h>
 #include <linux/vmpressure.h>
+#include <linux/virtio_config.h>
 
 #include <dev>
 #include <virtio_balloon.h>
@@ -66,14 +67,6 @@ static void tell_host_pressure(struct virtio_balloon *vb){}
 static void balloon_ack(struct virtqueue *vq){}
 static void message_ack(struct virtqueue *vq){}
 static void tell_host(struct virtio_balloon *vb, struct virtqueue *vq){}
-
-/**
- * The function "fill_balloon" fills a balloon device with a specified number of pages, while ensuring
- * that the guest is not under pressure and handling any errors that may occur.
- * 
- * @param vb A pointer to a struct virtio_balloon object.
- * @param num The parameter "num" represents the number of pages to fill in the balloon.
- */
 static void fill_balloon(struct virtio_balloon *vb, size_t num)
 {
 	struct balloon_dev_info *vb_dev_info = vb->vb_dev_info;
@@ -109,19 +102,7 @@ static void fill_balloon(struct virtio_balloon *vb, size_t num)
 		tell_host(vb, vb->inflate_vq);
 	mutex_unlock(&vb->balloon_lock);
 }
-
-static void release_pages_by_pfn(const u32 pfns[], unsigned int num)
-{
-	unsigned int i;
-
-	/* Find pfns pointing at start of each page, get pages and free them. */
-	for (i = 0; i < num; i += VIRTIO_BALLOON_PAGES_PER_PAGE) {
-		struct page *page = balloon_pfn_to_page(pfns[i]);
-		balloon_page_free(page);
-		adjust_managed_page_count(page, 1);
-	}
-}
-
+static void release_pages_by_pfn(const u32 pfns[], unsigned int num){}
 static void leak_balloon(struct virtio_balloon *vb, size_t num)
 {
 	struct page *page;
@@ -150,18 +131,9 @@ static void leak_balloon(struct virtio_balloon *vb, size_t num)
 	mutex_unlock(&vb->balloon_lock);
 	release_pages_by_pfn(vb->pfns, vb->num_pfns);
 }
-
 static void update_stats(struct virtio_balloon *vb){}
-
-
 static void stats_request(struct virtqueue *vq){}
-
 static void send_stats_to_host(struct virtio_balloon *vb){}
-
-/**
- * The function calculates the difference between the target number of pages and the current number of
- * pages in a virtio balloon vdev.
- */
 static inline s64 towards_target(struct virtio_balloon *vb)
 {
 	__le32 v;
@@ -172,7 +144,6 @@ static inline s64 towards_target(struct virtio_balloon *vb)
 	target = le32_to_cpu(v);
 	return target - vb->num_pages;
 }
-
 static void update_balloon_size(struct virtio_balloon *vb)
 {
 	__le32 actual = cpu_to_le32(vb->num_pages);
@@ -180,16 +151,6 @@ static void update_balloon_size(struct virtio_balloon *vb)
 	virtio_cwrite(vb->vdev, struct virtio_balloon_config, actual,
 		      &actual);
 }
-
-/**
- * The function "balloon" is a static function that manages the balloon driver for a virtual machine,
- * adjusting the balloon size based on guest pressure and updating statistics.
- * 
- * @param _vballoon The parameter `_vballoon` is a void pointer that is cast to a `struct
- * virtio_balloon` pointer within the function.
- * 
- * @return an integer value of 0.
- */
 static int balloon(void *_vballoon)
 {
 	struct virtio_balloon *vb = _vballoon;
