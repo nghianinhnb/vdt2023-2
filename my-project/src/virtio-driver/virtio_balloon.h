@@ -4,6 +4,9 @@
 #include <linux/virtio_ids.h>
 #include <linux/virtio_config.h>
 
+typedef unsigned long long u64;
+typedef unsigned int u32;
+
 /* Size of a PFN in the balloon interface. */
 #define VIRTIO_BALLOON_PFN_SHIFT 12
 

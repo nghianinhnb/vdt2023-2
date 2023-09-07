@@ -15,53 +15,74 @@
 #include <virtio_balloon.h>
 #include <virt_channel.h>
 
-#define VIRTIO_BALLOON_PAGES_PER_PAGE (unsigned)(PAGE_SIZE >> VIRTIO_BALLOON_PFN_SHIFT)
-#define VIRTIO_BALLOON_ARRAY_PFNS_MAX 256
-#define VIRTIO_BALLOON_PAGES_PER_32MB 32 * 1024 / 4
-#define VIRTIO_BALLOON_MSG_PRESSURE 1
+#define VIRTIO_BALLOON_PAGES_PER_32MB 32 << 8
 
 
 struct virtio_balloon 
 {
     struct virtio_device *vdev;
-    struct balloon_dev_info *b_dev_info;
-    struct virtqueue *message_virtqueue, *stats_virtqueue, *inflate_virtqueue, *deflate_virtqueue;
+    struct balloon_dev_info *balloon_dev_info;
+    struct virt_channel *stats_channel, *inflate_channel, *deflate_channel;
+
+    /* The thread servicing the balloon. */
+	struct task_struct *thread;
+
+    /* Ensure only one thread operates pages at a time */
+    struct mutex page_mutex;
 
     // Number of balloon pages give to host
     unsigned int num_pages;
 
-    /* Memory statistics */
-	__virtio64 stats[2];
     float pressure;
 };
 
 
 static int virtio_balloon_probe(struct virtio_device *vdev)
 {
+    int err = -1;
     struct virtio_balloon *vb = NULL;
 
-    /* initialize */
-    vb = kzalloc(sizeof(struct virtio_balloon), GFP_KERNEL);
+    if (!(vb = kzalloc(sizeof(struct virtio_balloon), GFP_KERNEL)))
+        return -ENOMEM;
+    
+    if (!(vb->balloon_dev_info = kzalloc(sizeof(struct balloon_dev_info), GFP_KERNEL))) {
+        err = -ENOMEM;
+        goto out_free_vb;
+    }
 
-    if (!vb) return -ENOMEM;
+    balloon_devinfo_init(vb->balloon_dev_info);
 
-    vdev->priv = vb;
+    if (
+           !(vb->stats_channel =   create_virt_channel(vdev, "stats_channel"))
+        || !(vb->inflate_channel = create_virt_channel(vdev, "inflate_channel"))
+        || !(vb->deflate_channel = create_virt_channel(vdev, "deflate_channel"))
+    ) goto out_del_vqs;
+
+    vb->thread = kthread_run(ballooning, vb, "ballooning");
+	if (IS_ERR(vb->thread)) {
+		err = PTR_ERR(vb->thread);
+		goto out_del_vqs;
+	}
+
+    mutex_init(&(vb->page_mutex));
+    vb->pressure = 0.0;
+    vb->num_pages = 0;
     vb->vdev = vdev;
-
-	/* end initialize */
-
-    /* register virtqueues */
-    // balloon->vq = virtio_find_single_vq(vdev, virtio_balloon_recv_cb, "input");
-    // if (IS_ERR(balloon->vq)) {
-    //         kfree(balloon);
-    //         return PTR_ERR(balloon->vq);
-
-    // }
+    vdev->priv = vb;
 
     /* from this point on, the vdev can notify and get callbacks */
     virtio_device_ready(vdev);
 
     return 0;
+
+out_del_vqs:
+	vdev->config->del_vqs(vdev);
+out_free_dev_info:
+    kfree(vb->balloon_dev_info);
+out_free_vb:
+    kfree(vb);
+out:
+    return err;
 }
 
 
@@ -69,20 +90,19 @@ static void virtio_balloon_remove(struct virtio_device *vdev)
 {
     struct virtio_balloon *vb = vdev->priv;
 
-    /*
-        * disable vq interrupts: equivalent to
-        * vdev->config->reset(vdev)
-        */
-    virtio_reset_device(vdev);
-
+    /* stop all ballooning thread */
+    kthread_stop(vb->thread);
+    /* free all pages left in the balloon */
+    while (vb->num_pages)
+		deflate_balloon(vb);
     /* detach unused buffers */
-    while ((buf = virtqueue_detach_unused_buf(vb->vq)) != NULL) {
-            kfree(buf);
-    }
-
-    /* remove virtqueues */
+    free_channel_buf(vb->stats_channel);
+    free_channel_buf(vb->inflate_channel);
+    free_channel_buf(vb->deflate_channel);
+    /* disable vq interrupts */
+    virtio_reset_device(vdev);
     vdev->config->del_vqs(vdev);
-
+    kfree(vb->balloon_dev_info);
     kfree(vb);
 }
 
@@ -111,18 +131,17 @@ MODULE_LICENSE("GPL");
 // ******************** UTILS ********************
 
 // *** Balloon Func ***
-static int balloon(void *_vballoon)
+static int ballooning(void *data)
 {
-	struct virtio_balloon *vb = _vballoon;
+	struct virtio_balloon *vb = data;
 
-	set_freezable();
 	while (!kthread_should_stop()) {
         update_stats(vb);
 
-		try_to_freeze();
         if (vb->pressure < 0.7) {
             inflate_balloon(vb);
-        } else if (vb->pressure > 0.8) {
+        } 
+        if (vb->pressure > 0.8) {
             deflate_balloon(vb);
         }
 
@@ -132,72 +151,56 @@ static int balloon(void *_vballoon)
 }
 
 static void inflate_balloon(struct virtio_balloon *vb){
-    unsigned int i;
-    struct list_head *pages;
-    INIT_LIST_HEAD(pages);
+    if (mutex_is_locked( &(vb->page_mutex) )) return;
 
-    for (i=0 ; i<VIRTIO_BALLOON_PAGES_PER_32MB ; i++) {
+    struct list_head pages;
+    INIT_LIST_HEAD(&pages);
+    size_t num_enqueued = 0;
+
+    mutex_lock(&vb->page_mutex);
+    for (unsigned int i=0 ; i<VIRTIO_BALLOON_PAGES_PER_32MB ; i++) {
         struct page *balloon_page = balloon_page_alloc();
-        if (!balloon_page) break;
-        list_add_tail(balloon_page->lru, pages);
+        if (!balloon_page) {
+            msleep(200);
+			break;
+        }
+        balloon_page_enqueue(vb->balloon_dev_info, balloon_page);
+        list_add(balloon_page->lru, &pages);
+        num_enqueued++;
     }
 
-    size_t num_enqueued = balloon_page_list_enqueue(vb->b_dev_info, pages);
-    if (!num_enqueued) return;
-    send_to_host(vb->inflate_virtqueue, NULL, NULL);
-    vb->num_pages += num_enqueued;
+    if (num_enqueued) {
+        channel_send_and_wait_ack(
+            vb->inflate_channel,
+            list_page_to_array(&pages, num_enqueued)
+        );
+        vb->num_pages += num_enqueued;
+    }
+    mutex_unlock(&vb->page_mutex);
 }
 
 static void deflate_balloon(struct virtio_balloon *vb){
     if (!vb->num_pages) return;
-    struct list_head *pages;
-    INIT_LIST_HEAD(pages);
-    size_t num_dequeued = balloon_page_list_dequeue(vb->b_dev_info, pages, VIRTIO_BALLOON_PAGES_PER_32MB);
-    if (!num_dequeued) return;
-    send_to_host(vb->inflate_virtqueue, pages, NULL);
-    vb->num_pages -= num_dequeued;
+
+    mutex_lock(&vb->page_mutex);
+    struct list_head pages;
+    INIT_LIST_HEAD(&pages);
+    size_t num_dequeued = balloon_page_list_dequeue(
+        vb->balloon_dev_info,
+        &pages,
+        VIRTIO_BALLOON_PAGES_PER_32MB
+    );
+
+    if (num_dequeued) {
+        channel_send_and_wait_ack(
+            vb->deflate_channel,
+            list_page_to_array(&pages, num_dequeued)
+        );
+        vb->num_pages -= num_dequeued;
+    }
+    mutex_unlock(&vb->page_mutex);
 }
 // *** End Balloon Func ***
-
-// *** Comunication Func ***
-static void send_to_host(struct virtqueue *vq, void *message, wait_queue_head_t ack)
-{
-	struct scatterlist sg;
-	unsigned int len;
-
-	if (!virtqueue_get_buf(vq, &len)) return;
-
-	sg_init_one(&sg, message, sizeof(message));
-
-    struct virtio_balloon *vb = vq->vdev->priv;
-
-	if (virtqueue_add_outbuf(vq, &sg, 1, vb, GFP_KERNEL) < 0) BUG();
-    // notify host
-	virtqueue_kick(vq);
-
-    if (ack) wait_event(ack, virtqueue_get_buf(vq, &len));
-}
-// *** End Comunication Func ***
-
-
-// *** Page Utils ***
-static struct page *balloon_pfn_to_page(u32 pfn)
-{
-	BUG_ON(pfn % VIRTIO_BALLOON_PAGES_PER_PAGE);
-	return pfn_to_page(pfn / VIRTIO_BALLOON_PAGES_PER_PAGE);
-}
-
-static void add_page_to_balloon_pfns(u32 pfns[], struct page *page)
-{
-	BUILD_BUG_ON(PAGE_SHIFT < VIRTIO_BALLOON_PFN_SHIFT);
-
-	unsigned long pfn = page_to_pfn(page);
-	u32 start_balloon_pfn = pfn * VIRTIO_BALLOON_PAGES_PER_PAGE;
-
-	for (unsigned int i = 0; i < VIRTIO_BALLOON_PAGES_PER_PAGE; i++)
-		pfns[i] = start_balloon_pfn + i;
-}
-// *** End Page Utils ***
 
 
 // *** Update Stats ***
@@ -206,13 +209,25 @@ static void add_page_to_balloon_pfns(u32 pfns[], struct page *page)
 static void update_stats(struct virtio_balloon *vb)
 {
 	struct sysinfo i;
-
 	si_meminfo(&i);
 
-    vb->stats[VIRTIO_BALLOON_S_MEMFREE] = pages_to_bytes(i.freeram);
-    vb->stats[VIRTIO_BALLOON_S_MEMTOT] = pages_to_bytes(i.totalram);
-    vb->pressure = vb->stats[VIRTIO_BALLOON_S_MEMFREE] / vb->stats[VIRTIO_BALLOON_S_MEMTOT];
+    u64 stats[2] = {pages_to_bytes(i.freeram), pages_to_bytes(i.totalram)};
+    vb->pressure = stats[0] / stats[1];
 
-    send_to_host(vb->stats_virtqueue, vb->stats, NULL);
+    channel_send(vb->stats_channel, stats);
 }
 // *** End Update Stats ***
+
+
+static struct page *list_page_to_array(struct list_head *head, size_t len) {
+    size_t i = 0;
+    struct page pages[len];
+    struct page *page, *tmp;
+
+    list_for_each_entry_safe(page, tmp, head, lru) {
+		list_del(&page->lru);
+		pages[i++] = *page;
+	}
+
+    return pages;
+}

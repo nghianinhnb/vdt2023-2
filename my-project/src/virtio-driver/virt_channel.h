@@ -10,6 +10,8 @@ struct virt_channel {
 };
 
 struct virt_channel *create_virt_channel(struct virtio_device *vdev, char *name);
+void free_channel_buf(struct virt_channel *channel);
+void channel_send(struct virt_channel *channel, void *message);
 void channel_send_and_wait_ack(struct virt_channel* channel, void* message);
 
 #endif // VIRT_CHANNEL_H
