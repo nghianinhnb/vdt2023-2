@@ -12,13 +12,13 @@ chưa thành công do phiên bản quá cũ đã không còn hỗ trợ.
 thống thực hiện theo dõi tải, tăng giảm bong bóng bộ nhớ, lấy các thông tin
 bộ nhớ phục vụ monitoring:
 
-  - [ ] Tìm hiểu và xây dựng chức năng theo dõi tải máy khách
+  - [x] Tìm hiểu và xây dựng chức năng theo dõi tải máy khách
 
-  - [ ] Tìm hiểu và xây dựng chức năng tăng giảm bong bóng bộ nhớ
+  - [x] Tìm hiểu và xây dựng chức năng tăng giảm bong bóng bộ nhớ
 
-  - [ ] Tìm hiểu và xây dựng chức năng cung cấp metric phục vụ monitoring
+  - [x] Tìm hiểu và xây dựng chức năng cung cấp metric phục vụ monitoring
 
-- [ ] **15/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
+- [ ] **14/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
 trên, thực hiện chức năng automatic ballooning, trả metric phục vụ monitoring
 
   - [ ] Tìm hiểu và xây dựng chức năng truyền nhận thông điệp báo tải máy khách,
@@ -28,7 +28,7 @@ trên, thực hiện chức năng automatic ballooning, trả metric phục vụ
 
   - [ ] Xây dựng các cli bật tắt, tùy chỉnh auto ballooning, lấy metric
 
-- [ ] **22/09** Cài đặt và kết nối 2 chương trình trên
+- [ ] **18/09** Cài đặt và kết nối 2 chương trình trên
 
 - [ ] **27/09** Benchmark khi chạy automatic balloon so với bình thường
 
