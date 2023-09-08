@@ -8,7 +8,7 @@ chưa thành công do phiên bản quá cũ đã không còn hỗ trợ.
 
 ## Công việc tiếp theo
 
-- [ ] **08/09** Xây dựng `virtIO balloon` driver. Là một module cung cấp các lời gọi hệ
+- [x] **08/09** Xây dựng `virtIO balloon` driver. Là một module cung cấp các lời gọi hệ
 thống thực hiện theo dõi tải, tăng giảm bong bóng bộ nhớ, lấy các thông tin
 bộ nhớ phục vụ monitoring:
 
