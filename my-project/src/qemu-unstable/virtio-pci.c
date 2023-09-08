@@ -1276,9 +1276,9 @@ static void balloon_pci_stats_set_poll_interval(Object *obj, struct Visitor *v,
 static Property virtio_balloon_pci_properties[] = {
     DEFINE_VIRTIO_COMMON_FEATURES(VirtIOPCIProxy, host_features),
     DEFINE_PROP_HEX32("class", VirtIOPCIProxy, class_code, 0),
-#ifdef __linux__
+#ifdef __linux__ /* gitdiff */
     DEFINE_PROP_BIT("automatic", VirtIOBalloonPCI, bconf.auto_balloon_enabled, 0, false),
-#endif
+#endif /* gitdiff */
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -1291,9 +1291,9 @@ static int virtio_balloon_pci_init(VirtIOPCIProxy *vpci_dev)
         vpci_dev->class_code != PCI_CLASS_MEMORY_RAM) { /* qemu < 1.1 */
         vpci_dev->class_code = PCI_CLASS_OTHERS;
     }
-
+    /* gitdiff */
     virtio_balloon_set_conf(vdev, &(dev->bconf));
-
+    /* gitdiff */
     qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
     if (qdev_init(vdev) < 0) {
         return -1;

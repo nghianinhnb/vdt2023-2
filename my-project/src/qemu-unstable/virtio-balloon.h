@@ -84,15 +84,6 @@ typedef struct VirtIOBalloon {
     uint32_t autob_cur_size;
     time_t autob_last_guest_pressure;
     VirtIOBalloonConf bconf;
-
-    /* Stats */
-    int nr_events_inflate_skipped;
-    int nr_events_deflate_skipped;
-    int nr_events_deflate_handled;
-    int nr_events_inflate_handled;
-    int nr_inflate_stopped;
-    int nr_pages_inflated;
-    int nr_pages_deflated;
 } VirtIOBalloon;
 
 void virtio_balloon_set_conf(DeviceState *dev, const VirtIOBalloonConf *bconf);

@@ -144,7 +144,7 @@ struct VirtIOBlkPCI {
 struct VirtIOBalloonPCI {
     VirtIOPCIProxy parent_obj;
     VirtIOBalloon vdev;
-    VirtIOBalloonConf bconf;
+    VirtIOBalloonConf bconf; /* gitdiff */
 };
 
 /*
@@ -157,7 +157,7 @@ struct VirtIOBalloonPCI {
 struct VirtIOSerialPCI {
     VirtIOPCIProxy parent_obj;
     VirtIOSerial vdev;
-    VirtIOBalloonConf bconf;
+    VirtIOBalloonConf bconf; /* gitdiff */
 };
 
 /*

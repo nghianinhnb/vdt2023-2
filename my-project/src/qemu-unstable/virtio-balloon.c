@@ -30,7 +30,7 @@
 #endif
 
 #include "hw/virtio/virtio-bus.h"
-
+/* gitdiff */
 #define LINUX_MEMCG_DEF_PATH "/sys/fs/cgroup/memory"
 #define AUTO_BALLOON_NR_PAGES ((32 * 1024 * 1024) >> VIRTIO_BALLOON_PFN_SHIFT)
 #define AUTO_BALLOON_PRESSURE_PERIOD 60
@@ -55,26 +55,21 @@ static bool guest_in_pressure(const VirtIOBalloon *s)
 static void inflate_guest(VirtIOBalloon *s)
 {
     if (guest_in_pressure(s)) {
-        s->nr_events_inflate_skipped++;
         return;
     }
 
     s->num_pages += AUTO_BALLOON_NR_PAGES;
     virtio_notify_config(VIRTIO_DEVICE(s));
-
-    s->nr_events_inflate_handled++;
 }
 
 static void deflate_guest(VirtIOBalloon *s)
 {
     if (!s->autob_cur_size) {
-        s->nr_events_deflate_skipped++;
         return;
     }
 
     s->num_pages -= AUTO_BALLOON_NR_PAGES;
     virtio_notify_config(VIRTIO_DEVICE(s));
-    s->nr_events_deflate_handled++;
 }
 
 static void virtio_balloon_handle_host_pressure(EventNotifier *ev)
@@ -160,7 +155,6 @@ static void automatic_balloon_init(VirtIOBalloon *s, const char *memcg_path,
         goto out_err;
     }
 
-    fprintf(stderr, "-> registered\n");
     return;
 
 out_err:
@@ -169,41 +163,7 @@ out_err:
 out:
     error_propagate(errp, local_err);
 }
-
-/* auto-ballooning stats, for debug only */
-#define PAGES_TO_KB(x)   ((x * 4096) / 1024)
-#define PAGES_TO_MB(x)   ((x * 4096) / (1024 * 1024))
-#define BYTES_TO_MB(x)   (x / (1024 * 1024))
-
-static void print_pages_info(const char *desc, unsigned int nr_pages)
-{
-    fprintf(stderr, "%s: %d (%dKB/%dMB)\n", desc, nr_pages,
-            PAGES_TO_KB(nr_pages), PAGES_TO_MB(nr_pages));
-}
-
-static void auto_balloon_stats_print(const BalloonInfo *info,const VirtIOBalloon *dev)
-{
-    /* to be dropped */
-    fprintf(stderr, "\n");
-    print_pages_info("assigned memory", ram_size >> VIRTIO_BALLOON_PFN_SHIFT);
-    print_pages_info("current memory",info->actual >> VIRTIO_BALLOON_PFN_SHIFT);
-    print_pages_info("balloon actual", dev->actual);
-    print_pages_info("balloon size", dev->autob_cur_size);
-    fprintf(stderr, "guest in pressure %d (counting: %ds)\n",
-            guest_in_pressure(dev),
-            (int) difftime(time(NULL), dev->autob_last_guest_pressure));
-    fprintf(stderr, "\nauto inflate\n");
-    print_pages_info("pages inflated", dev->nr_pages_inflated);
-    fprintf(stderr, "  events handled: %d\n",dev->nr_events_inflate_handled);
-    fprintf(stderr, "  skipped (g. pressure): %d\n", dev->nr_events_inflate_skipped);
-    fprintf(stderr, "  inflates stopped: %d\n", dev->nr_inflate_stopped);
-    fprintf(stderr, "\nauto deflate\n");
-    print_pages_info("pages deflated", dev->nr_pages_deflated);
-    fprintf(stderr, "  deflates handled: %d\n",dev->nr_events_deflate_handled);
-    fprintf(stderr, "  skipped (b. empty): %d\n",dev->nr_events_deflate_skipped);
-    fprintf(stderr, "\n\n\n");
-}
-
+/* gitdiff */
 static void balloon_page(void *addr, int deflate)
 {
 #if defined(__linux__)
@@ -350,7 +310,7 @@ static void balloon_stats_set_poll_interval(Object *obj, struct Visitor *v,
     s->stats_poll_interval = value;
     balloon_stats_change_timer(s, 0);
 }
-
+/* gitdiff */
 static void virtio_balloon_handle_msg(VirtIODevice *vdev, VirtQueue *vq)
 {
     VirtIOBalloon *dev = VIRTIO_BALLOON(vdev);
@@ -369,7 +329,6 @@ static void virtio_balloon_handle_msg(VirtIODevice *vdev, VirtQueue *vq)
                 if (dev->num_pages > dev->autob_cur_size) {
                     /* cancel on-going inflation */
                     dev->num_pages = dev->autob_cur_size;
-                    dev->nr_inflate_stopped++;
                 } else {
                     deflate_guest(dev);
                 }
@@ -379,7 +338,7 @@ static void virtio_balloon_handle_msg(VirtIODevice *vdev, VirtQueue *vq)
         virtio_notify(vdev, vq);
     }
 }
-
+/* gitdiff */
 static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
 {
     VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
@@ -410,10 +369,8 @@ static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
             memory_region_unref(section.mr);
 
             if (vq == s->ivq) {
-                s->nr_pages_inflated++;
                 s->autob_cur_size++;
             } else {
-                s->nr_pages_deflated++;
                 s->autob_cur_size--;
             }
         }
@@ -489,7 +446,7 @@ static void virtio_balloon_set_config(VirtIODevice *vdev,
                        ((ram_addr_t) dev->actual << VIRTIO_BALLOON_PFN_SHIFT));
     }
 }
-
+/* gitdiff */
 static uint32_t virtio_balloon_get_features(VirtIODevice *vdev, uint32_t f)
 {
     f |= (1 << VIRTIO_BALLOON_F_STATS_VQ);
@@ -497,14 +454,12 @@ static uint32_t virtio_balloon_get_features(VirtIODevice *vdev, uint32_t f)
 
     return f;
 }
-
+/* gitdiff */
 static void virtio_balloon_stat(void *opaque, BalloonInfo *info)
 {
     VirtIOBalloon *dev = opaque;
     info->actual = ram_size - ((uint64_t) dev->actual <<
                                VIRTIO_BALLOON_PFN_SHIFT);
-
-    auto_balloon_stats_print(info, dev);
 }
 
 static void virtio_balloon_to_target(void *opaque, ram_addr_t target)
@@ -555,6 +510,7 @@ static void virtio_balloon_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VirtIOBalloon *s = VIRTIO_BALLOON(dev);
+    /* gitdiff */
     Error *local_err = NULL;
     int ret;
 
@@ -568,7 +524,7 @@ static void virtio_balloon_device_realize(DeviceState *dev, Error **errp)
             return;
         }
     }
-
+    /* gitdiff */
     ret = qemu_add_balloon_handler(virtio_balloon_to_target,
                                    virtio_balloon_stat, s);
 
@@ -581,7 +537,9 @@ static void virtio_balloon_device_realize(DeviceState *dev, Error **errp)
     s->ivq = virtio_add_queue(vdev, 128, virtio_balloon_handle_output);
     s->dvq = virtio_add_queue(vdev, 128, virtio_balloon_handle_output);
     s->svq = virtio_add_queue(vdev, 128, virtio_balloon_receive_stats);
+    /* gitdiff */
     s->mvq = virtio_add_queue(vdev, 128, virtio_balloon_handle_msg);
+    /* gitdiff */
 
     register_savevm(dev, "virtio-balloon", -1, 1,
                     virtio_balloon_save, virtio_balloon_load, s);
