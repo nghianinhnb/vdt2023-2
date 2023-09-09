@@ -13,7 +13,6 @@
 #include <linux/vmpressure.h>
 #include <linux/virtio_config.h>
 #include <linux/balloon_compaction.h>
-#include <linux/virtio_config.h>
 
 #include "virtio_balloon.h"
 
@@ -107,23 +106,23 @@ static void update_stats(struct virtio_balloon *vb)
     vb->stats[0] = pages_to_bytes(i.freeram);
     vb->stats[1] = pages_to_bytes(i.totalram);
 
-    printk(KERN_INFO "mem_free %llu, mem_total %llu", vb->stats[0], vb->stats[1]);
+    printk(KERN_INFO "mem_free %lu, mem_total %lu", vb->stats[0], vb->stats[1]);
     channel_send(vb->stats_channel, vb->stats);
 }
 // *** End Update Stats ***
 
 
-static struct page *page_list_to_array(struct list_head *head, size_t len) {
+static unsigned long *pages_to_pfn_array(struct list_head *head, size_t len) {
     size_t i = 0;
-    struct page pages[len];
+    unsigned long pfns[len];
     struct page *page, *tmp;
 
     list_for_each_entry_safe(page, tmp, head, lru) {
 		list_del(&page->lru);
-		pages[i++] = *page;
+		pfns[i++] = page_to_pfn(page);
 	}
 
-    return pages;
+    return pfns;
 }
 
 // *** Balloon Func ***
@@ -151,7 +150,7 @@ static void inflate_balloon(struct virtio_balloon *vb){
     if (num_enqueued) {
         channel_send_and_wait_ack(
             vb->inflate_channel,
-            page_list_to_array(&pages, num_enqueued)
+            pages_to_pfn_array(&pages, num_enqueued)
         );
         vb->num_pages += num_enqueued;
     }
@@ -173,7 +172,7 @@ static void deflate_balloon(struct virtio_balloon *vb){
     if (num_dequeued) {
         channel_send_and_wait_ack(
             vb->deflate_channel,
-            page_list_to_array(&pages, num_dequeued)
+            pages_to_pfn_array(&pages, num_dequeued)
         );
         vb->num_pages -= num_dequeued;
     }
@@ -237,6 +236,7 @@ static int virtio_balloon_probe(struct virtio_device *vdev)
 
     /* from this point on, the vdev can notify and get callbacks */
     virtio_device_ready(vdev);
+    printk(KERN_INFO "VirtIO Hello Word!");
 
     return 0;
 
