@@ -66,6 +66,8 @@ static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     VirtQueueElement *elem;
     MemoryRegionSection section;
 
+    fprintf(stdout, "page receive");
+
     for (;;) {
         size_t offset = 0;
         uint32_t pfn;
@@ -116,6 +118,8 @@ static void virtio_balloon_receive_stats(VirtIODevice *vdev, VirtQueue *vq)
     uint64_t stat[2];
     size_t offset = 0;
 
+    fprintf(stdout, "stat receive");
+
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) return;
 
@@ -129,7 +133,7 @@ static void virtio_balloon_receive_stats(VirtIODevice *vdev, VirtQueue *vq)
         uint64_t memfree = virtio_tswap64(vdev, stat[0]);
         uint64_t memtotal = virtio_tswap64(vdev, stat[1]);
         offset += sizeof(stat);
-        fprintf("mem_free %lu, mem_total %lu", memfree, memtotal);
+        fprintf(stdout, "mem_free %lu, mem_total %lu", memfree, memtotal);
     }
 }
 
@@ -137,6 +141,8 @@ static void virtio_balloon_device_realize(DeviceState *dev, Error **errp)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VirtIOBalloon *s = VIRTIO_BALLOON(dev);
+
+    fprintf(stdout, "balloon device realize");
 
     virtio_init(vdev, "virtio-balloon", VIRTIO_ID_BALLOON, 0);
 
@@ -174,6 +180,8 @@ static void virtio_balloon_class_init(ObjectClass *klass, void *data)
     device_class_set_props(dc, virtio_balloon_properties);
     vdc->realize = virtio_balloon_device_realize;
     vdc->unrealize = virtio_balloon_device_unrealize;
+
+    fprintf(stdout, "balloon device class init");
 }
 
 static const TypeInfo virtio_balloon_info = {

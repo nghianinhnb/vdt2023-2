@@ -236,7 +236,6 @@ static int virtio_balloon_probe(struct virtio_device *vdev)
 
     /* from this point on, the vdev can notify and get callbacks */
     virtio_device_ready(vdev);
-    printk(KERN_WARNING "VirtIO Hello Word!");
 
     return 0;
 
