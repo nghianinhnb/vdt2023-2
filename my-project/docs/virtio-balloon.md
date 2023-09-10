@@ -35,18 +35,36 @@ clean:
 Build và thêm vào kernel:
 
 ```bash
-make
-sudo insmod my_driver.ko
+sudo make
+sudo make install
+modinfo /lib/modules/$(uname -r)/extra/virtio_balloon.ko
+sudo insmod /lib/modules/$(uname -r)/extra/virtio_balloon.ko
+sudo modprobe --force-modversion virtio_balloon
 ```
 
 Kiểm tra xem driver đã được thêm thành công chưa:
 
 ```bash
-dmesg
+sudo lsmod | grep virtio_balloon
+```
+
+```bash
+sudo dmesg
 ```
 
 Gỡ bỏ driver khỏi kernel
 
 ```bash
-sudo rmmod my_driver
+sudo rmmod -f /lib/modules/$(uname -r)/extra/virtio_balloon.ko
+```
+
+## Build và cài đặt custom qemu
+
+Cài các dependencies cần thiết:
+
+```bash
+sudo apt install -y libglib2.0-dev libgcrypt20-dev zlib1g-dev autoconf make automake libtool bison flex libpixman-1-dev device-tree-compiler seabios ninja-build
+./configure --target-list=x86_64-softmmu --enable-kvm --disable-werror --prefix=/usr
+
+sudo apt install -y libvirt-daemon-system virtinst
 ```

@@ -7,7 +7,7 @@
 #include "hw/qdev-properties.h"
 #include "hw/boards.h"
 #include "sysemu/balloon.h"
-#include "virtio-balloon.h"
+#include "hw/virtio/virtio-balloon.h"
 #include "exec/address-spaces.h"
 #include "qapi/error.h"
 #include "qapi/qapi-events-machine.h"
@@ -91,16 +91,15 @@ static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
                 continue;
             }
 
-            if (!virtio_balloon_inhibited()) {
-                if (vq == s->ivq) {
-                    balloon_inflate_page(s, section.mr,
-                                         section.offset_within_region);
-                } else if (vq == s->dvq) {
-                    balloon_deflate_page(s, section.mr, section.offset_within_region);
-                } else {
-                    g_assert_not_reached();
-                }
+            if (vq == s->ivq) {
+                balloon_inflate_page(s, section.mr,
+                                        section.offset_within_region);
+            } else if (vq == s->dvq) {
+                balloon_deflate_page(s, section.mr, section.offset_within_region);
+            } else {
+                g_assert_not_reached();
             }
+
             memory_region_unref(section.mr);
         }
 
@@ -130,7 +129,7 @@ static void virtio_balloon_receive_stats(VirtIODevice *vdev, VirtQueue *vq)
         uint64_t memfree = virtio_tswap64(vdev, stat[0]);
         uint64_t memtotal = virtio_tswap64(vdev, stat[1]);
         offset += sizeof(stat);
-        printf("mem_free %lu, mem_total %lu", memfree, memtotal);
+        fprintf("mem_free %lu, mem_total %lu", memfree, memtotal);
     }
 }
 

@@ -106,7 +106,7 @@ static void update_stats(struct virtio_balloon *vb)
     vb->stats[0] = pages_to_bytes(i.freeram);
     vb->stats[1] = pages_to_bytes(i.totalram);
 
-    printk(KERN_INFO "mem_free %lu, mem_total %lu", vb->stats[0], vb->stats[1]);
+    printk(KERN_WARNING "mem_free %lu, mem_total %lu", vb->stats[0], vb->stats[1]);
     channel_send(vb->stats_channel, vb->stats);
 }
 // *** End Update Stats ***
@@ -236,7 +236,7 @@ static int virtio_balloon_probe(struct virtio_device *vdev)
 
     /* from this point on, the vdev can notify and get callbacks */
     virtio_device_ready(vdev);
-    printk(KERN_INFO "VirtIO Hello Word!");
+    printk(KERN_WARNING "VirtIO Hello Word!");
 
     return 0;
 

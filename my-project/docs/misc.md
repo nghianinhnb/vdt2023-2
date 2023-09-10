@@ -45,3 +45,9 @@ có thể chống phân mảnh trên đống ram được nhận để khi trả
 Máy chủ lấy stats thế nào?
 khi máy chủ nhận được thông tin stats thì ghi ra stdout, việc còn lại để các component
 khác thu thập và xử lý
+
+[ ] Soát lại 1 lần nữa vb.c
+[ ] Sửa pci những chỗ dùng virtio config
+[ ] Build lại virtio driver xem nhận chưa
+[ ] Cài quemu mới xem lỗi không
+[ ] Build máy ảo lên để test
