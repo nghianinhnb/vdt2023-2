@@ -21,10 +21,10 @@ bộ nhớ phục vụ monitoring:
 - [ ] **14/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
 trên, thực hiện chức năng automatic ballooning, trả metric phục vụ monitoring
 
-  - [ ] Tìm hiểu và xây dựng chức năng truyền nhận thông điệp báo tải máy khách,
+  - [x] Tìm hiểu và xây dựng chức năng truyền nhận thông điệp báo tải máy khách,
   tăng giảm bong bóng bộ nhớ
 
-  - [ ] Xây dựng các thủ tục tương ứng với từng thông điệp
+  - [x] Xây dựng các thủ tục tương ứng với từng thông điệp
 
   - [ ] Xây dựng các cli bật tắt, tùy chỉnh auto ballooning, lấy metric
 
