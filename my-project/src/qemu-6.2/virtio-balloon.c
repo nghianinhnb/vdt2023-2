@@ -20,9 +20,6 @@
 
 #define BALLOON_PAGE_SIZE  (1 << VIRTIO_BALLOON_PFN_SHIFT)
 
-#define LINUX_MEMCG_DEF_PATH "/sys/fs/cgroup/memory"
-#define AUTO_BALLOON_NR_PAGES ((32 * 1024 * 1024) >> VIRTIO_BALLOON_PFN_SHIFT)
-
 
 static void balloon_deflate_page(VirtIOBalloon *balloon,
                                  MemoryRegion *mr, hwaddr mr_offset)
@@ -65,8 +62,6 @@ static void virtio_balloon_handle_output(VirtIODevice *vdev, VirtQueue *vq)
     VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
     VirtQueueElement *elem;
     MemoryRegionSection section;
-
-    fprintf(stdout, "page receive");
 
     for (;;) {
         size_t offset = 0;
@@ -118,8 +113,6 @@ static void virtio_balloon_receive_stats(VirtIODevice *vdev, VirtQueue *vq)
     uint64_t stat[2];
     size_t offset = 0;
 
-    fprintf(stdout, "stat receive");
-
     elem = virtqueue_pop(vq, sizeof(VirtQueueElement));
     if (!elem) return;
 
@@ -142,9 +135,7 @@ static void virtio_balloon_device_realize(DeviceState *dev, Error **errp)
     VirtIODevice *vdev = VIRTIO_DEVICE(dev);
     VirtIOBalloon *s = VIRTIO_BALLOON(dev);
 
-    fprintf(stdout, "balloon device realize");
-
-    virtio_init(vdev, "virtio-balloon", VIRTIO_ID_BALLOON, 0);
+    virtio_init(vdev, "virtio-balloon", VIRTIO_ID_BALLOON, sizeof(struct virtio_balloon_config));
 
     s->ivq = virtio_add_queue(vdev, 128, virtio_balloon_handle_output);
     s->dvq = virtio_add_queue(vdev, 128, virtio_balloon_handle_output);
@@ -159,29 +150,94 @@ static void virtio_balloon_device_unrealize(DeviceState *dev)
     virtio_delete_queue(s->ivq);
     virtio_delete_queue(s->dvq);
     virtio_delete_queue(s->svq);
+
     virtio_cleanup(vdev);
 }
+
+static void virtio_balloon_device_reset(VirtIODevice *vdev)
+{
+    VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
+
+    if (s->stats_vq_elem != NULL) {
+        virtqueue_unpop(s->svq, s->stats_vq_elem, 0);
+        g_free(s->stats_vq_elem);
+        s->stats_vq_elem = NULL;
+    }
+}
+
+static void virtio_balloon_get_config(VirtIODevice *vdev, uint8_t *config_data){}
+
+static void virtio_balloon_set_config(VirtIODevice *vdev,
+                                      const uint8_t *config_data){}
+
+static uint64_t virtio_balloon_get_features(VirtIODevice *vdev, uint64_t f,
+                                            Error **errp)
+{
+    return 0;
+}
+
+static void virtio_balloon_set_status(VirtIODevice *vdev, uint8_t status)
+{
+    VirtIOBalloon *s = VIRTIO_BALLOON(vdev);
+
+    if (!s->stats_vq_elem && vdev->vm_running &&
+        (status & VIRTIO_CONFIG_S_DRIVER_OK) && virtqueue_rewind(s->svq, 1)) {
+        /* poll stats queue for the element we have discarded when the VM
+         * was stopped */
+        virtio_balloon_receive_stats(vdev, s->svq);
+    }
+}
+
+static int virtio_balloon_post_load_device(void *opaque, int version_id)
+{
+    return 0;
+}
+
+static const VMStateDescription vmstate_virtio_balloon_device = {
+    .name = "virtio-balloon-device",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .post_load = virtio_balloon_post_load_device,
+    .fields = (VMStateField[]) {
+        VMSTATE_END_OF_LIST()
+    },
+    .subsections = (const VMStateDescription * []) {
+        NULL
+    }
+};
+
+static const VMStateDescription vmstate_virtio_balloon = {
+    .name = "virtio-balloon",
+    .minimum_version_id = 1,
+    .version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_VIRTIO_DEVICE,
+        VMSTATE_END_OF_LIST()
+    },
+};
 
 static Property virtio_balloon_properties[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
-static void virtio_balloon_instance_init(Object *obj)
-{
-    VirtIOBalloon *s = VIRTIO_BALLOON(obj);
-}
+static void virtio_balloon_instance_init(Object *obj){}
 
 static void virtio_balloon_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
     VirtioDeviceClass *vdc = VIRTIO_DEVICE_CLASS(klass);
 
-    set_bit(DEVICE_CATEGORY_MISC, dc->categories);
     device_class_set_props(dc, virtio_balloon_properties);
+    dc->vmsd = &vmstate_virtio_balloon;
+    set_bit(DEVICE_CATEGORY_MISC, dc->categories);
     vdc->realize = virtio_balloon_device_realize;
     vdc->unrealize = virtio_balloon_device_unrealize;
-
-    fprintf(stdout, "balloon device class init");
+    vdc->reset = virtio_balloon_device_reset;
+    vdc->get_config = virtio_balloon_get_config;
+    vdc->set_config = virtio_balloon_set_config;
+    vdc->get_features = virtio_balloon_get_features;
+    vdc->set_status = virtio_balloon_set_status;
+    vdc->vmsd = &vmstate_virtio_balloon_device;
 }
 
 static const TypeInfo virtio_balloon_info = {

@@ -18,7 +18,7 @@ bộ nhớ phục vụ monitoring:
 
   - [x] Tìm hiểu và xây dựng chức năng cung cấp metric phục vụ monitoring
 
-- [ ] **14/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
+- [x] **14/09:** Custom QEMU điều khiển máy chủ và máy khách gọi các lời gọi hệ thống
 trên, thực hiện chức năng automatic ballooning, trả metric phục vụ monitoring
 
   - [x] Tìm hiểu và xây dựng chức năng truyền nhận thông điệp báo tải máy khách,

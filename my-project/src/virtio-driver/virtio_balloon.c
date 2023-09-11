@@ -252,6 +252,7 @@ out:
 
 static void virtio_balloon_remove(struct virtio_device *vdev)
 {
+    printk(KERN_WARNING"driver in exit");
     struct virtio_balloon *vb = vdev->priv;
 
     /* stop all ballooning thread */

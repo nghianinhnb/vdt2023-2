@@ -39,7 +39,6 @@ sudo make
 sudo make install
 modinfo /lib/modules/$(uname -r)/extra/virtio_balloon.ko
 sudo insmod /lib/modules/$(uname -r)/extra/virtio_balloon.ko
-sudo modprobe --force-modversion virtio_balloon
 ```
 
 Kiểm tra xem driver đã được thêm thành công chưa:
@@ -60,11 +59,36 @@ sudo rmmod -f /lib/modules/$(uname -r)/extra/virtio_balloon.ko
 
 ## Build và cài đặt custom qemu
 
-Cài các dependencies cần thiết:
-
 ```bash
 sudo apt install -y libglib2.0-dev libgcrypt20-dev zlib1g-dev autoconf make automake libtool bison flex libpixman-1-dev device-tree-compiler seabios ninja-build
 ./configure --target-list=x86_64-softmmu --enable-kvm --disable-werror --prefix=/usr
-
+sudo make install -j
 sudo apt install -y libvirt-daemon-system virtinst
+sudo usermod -aG kvm $(whoami)
+sudo usermod -aG libvirt $(whoami)
+```
+
+```bash
+virt-install \
+  --name=host \
+  --vcpus=4 \
+  --ram=4096 \
+  --disk path=./vm1.img,size=8 \
+  --location=./ubuntu-20.04.6-live-server-amd64.iso \
+  --extra-args="console=ttyS0 textmode=1" \
+  --graphics none \
+  --host-device=pci_0000_05_00_0
+
+kvm \
+  -enable-kvm \
+  -name vm1 \
+  -smp 2 \
+  -m 2048 \
+  -drive file=./vm1.img \
+  -kernel ./linux \
+  -initrd ./initrd.gz \
+  -cdrom ./ubuntu-20.04.6-live-server-amd64.iso \
+  -boot d \
+  -append "console=ttyS0 textmode=1" \
+  -device virtio-balloon
 ```
