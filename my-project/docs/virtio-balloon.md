@@ -63,32 +63,58 @@ sudo rmmod -f /lib/modules/$(uname -r)/extra/virtio_balloon.ko
 sudo apt install -y libglib2.0-dev libgcrypt20-dev zlib1g-dev autoconf make automake libtool bison flex libpixman-1-dev device-tree-compiler seabios ninja-build
 ./configure --target-list=x86_64-softmmu --enable-kvm --disable-werror --prefix=/usr
 sudo make install -j
-sudo apt install -y libvirt-daemon-system virtinst
+sudo apt install -y libvirt-clients libvirt-daemon-system virtinst
 sudo usermod -aG kvm $(whoami)
 sudo usermod -aG libvirt $(whoami)
 ```
 
 ```bash
+qemu-img create -f qcow2 /var/lib/libvirt/images/vm1.img 12G
+
 virt-install \
-  --name=host \
+  --name=vm1 \
   --vcpus=4 \
   --ram=4096 \
-  --disk path=./vm1.img,size=8 \
+  --disk size=8 \
   --location=./ubuntu-20.04.6-live-server-amd64.iso \
   --extra-args="console=ttyS0 textmode=1" \
   --graphics none \
-  --host-device=pci_0000_05_00_0
+  --controller type=virtio-balloon
+
+kvm \
+  -name vm1 \
+  -smp 4 \
+  -m 4096 \
+  -drive file=/var/lib/libvirt/images/vm1.img \
+  -cdrom ~/Downloads/ubuntu-20.04.6-live-server-amd64.iso \
+  -kernel ~/Downloads/linux \
+  -initrd ~/Downloads/initrd.gz \
+  -boot menu=on \
+  -nographic \
+  -append "console=ttyS0 textmode=1" \
+  -device virtio-balloon
+
+kvm \
+  -name vm1 \
+  -smp 4 \
+  -m 4096 \
+  -drive file=/var/lib/libvirt/images/vm1.img \
+  -cdrom ~/Downloads/ubuntu-20.04.6-live-server-amd64.iso \
+  -kernel ~/Downloads/linux \
+  -initrd ~/Downloads/initrd.gz \
+  -boot menu=on \
+  -nographic \
+  -append "console=ttyS0 textmode=1" \
+  -device virtio-balloon
 
 kvm \
   -enable-kvm \
   -name vm1 \
-  -smp 2 \
-  -m 2048 \
-  -drive file=./vm1.img \
-  -kernel ./linux \
-  -initrd ./initrd.gz \
-  -cdrom ./ubuntu-20.04.6-live-server-amd64.iso \
+  -smp 4 \
+  -m 4096 \
+  -drive file=/var/lib/libvirt/images/vm1.img \
+  -cdrom ~/Downloads/ubuntu-20.04.6-live-server-amd64.iso \
   -boot d \
-  -append "console=ttyS0 textmode=1" \
+  -nographic -serial stdio -display none -monitor null \
   -device virtio-balloon
 ```
