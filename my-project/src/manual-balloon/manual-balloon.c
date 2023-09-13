@@ -9,6 +9,11 @@
 
 #define MAX_VM_NAME_LENGTH 100
 
+#define CONFIG_LOW_THRESHOLD_DEFAULT = 0.7
+#define CONFIG_HIGH_THRESHOLD_DEFAULT = 0.85
+#define CONFIG_INTERVAL_DEFAULT = 5
+#define CONFIG_SPEED_DEFAULT = 64 << 10
+
 #define CONFIG_FILE "/etc/balloon/default.conf"
 #define ERROR_LOG_FILE "/var/log/balloon/error.log"
 
@@ -142,6 +147,19 @@ vm_info get_vm_mem_info(const char *vm_name) {
     return vm;
 }
 
+void generate_default_config_file() {
+    FILE *file = fopen(CONFIG_FILE, "w");
+    if (file == NULL) {
+        err_log("[generate_default_config_file] Error creating config file");
+        exit(1);
+    }
+    fprintf(file, "low_threshold=%f\n", CONFIG_LOW_THRESHOLD_DEFAULT);
+    fprintf(file, "high_threshold=%f\n", CONFIG_HIGH_THRESHOLD_DEFAULT);
+    fprintf(file, "interval=%u\n", CONFIG_INTERVAL_DEFAULT);
+    fprintf(file, "speed=%u\n", CONFIG_SPEED_DEFAULT);
+    fclose(file);
+}
+
 void read_config(balloon_config *config) {
     char config_buffer[256];
     FILE *file = fopen(CONFIG_FILE, "r");
@@ -161,21 +179,22 @@ void read_config(balloon_config *config) {
 out_close_file:
     fclose(file);
 out_default:
-    err_log("[read_config] Error reading config file. Use default config")
-    config->low_threshold = 0.7;
-    config->high_threshold = 0.85;
-    config->interval = 10;
-    config->speed = 32 << 10;
+    err_log("[read_config] Error reading config file. Use default config");
+    config->low_threshold = CONFIG_LOW_THRESHOLD_DEFAULT;
+    config->high_threshold = CONFIG_HIGH_THRESHOLD_DEFAULT;
+    config->interval = CONFIG_INTERVAL_DEFAULT;
+    config->speed = CONFIG_SPEED_DEFAULT;
 }
 
 
 void ballooning() {
     struct sysinfo info;
     balloon_config config;
+    char** vm_list;
 
     for (;;) {
         read_config(&config);
-        char** vm_list = get_running_vm_names();
+        vm_list = get_running_vm_names();
 
         for (int i = 0; vm_list[i] != NULL; i++) {
             vm_info vm = get_vm_mem_info(vm_list[i]);
