@@ -12,12 +12,11 @@
 #include <libvirt/libvirt.h>
 
 #define MAX_VM_NAME_LENGTH 64
-#define VM_REVERSE_RAM_SIZE (long int) (128 << 10)
 
 #define CONFIG_LOW_THRESHOLD_DEFAULT 0.7
 #define CONFIG_HIGH_THRESHOLD_DEFAULT 0.85
-#define CONFIG_INTERVAL_DEFAULT (long int) 10
-#define CONFIG_SPEED_DEFAULT (long int) (64 << 10)
+#define CONFIG_INTERVAL_DEFAULT (long int) 7
+#define CONFIG_SPEED_DEFAULT (long int) (32 << 10)
 
 #define CONFIG_FILE "/etc/balloon/default.conf"
 #define ERROR_LOG_FILE "/var/log/balloon/error.log"
@@ -48,14 +47,6 @@ void err_log(const char *format, ...) {
     }
 }
 
-int create_file_if_not_exist() {
-    int status = 0;
-    status = system("mkdir -p /etc/balloon");
-    status = system("mkdir -p /var/log/balloon");
-    generate_default_config_file();
-    return status;
-}
-
 void generate_default_config_file() {
     FILE *file = fopen(CONFIG_FILE, "w");
     if (file == NULL) {
@@ -67,6 +58,14 @@ void generate_default_config_file() {
     fprintf(file, "interval=%ld\n", CONFIG_INTERVAL_DEFAULT);
     fprintf(file, "speed=%ld", CONFIG_SPEED_DEFAULT);
     fclose(file);
+}
+
+int create_file_if_not_exist() {
+    int status = 0;
+    status = system("mkdir -p /etc/balloon");
+    status = system("mkdir -p /var/log/balloon");
+    generate_default_config_file();
+    return status;
 }
 
 void read_config(balloon_config *config) {
@@ -126,16 +125,21 @@ void ballooning() {
 
         for (i = 0; i < num_VMs; i++) {
             virDomainPtr dom = virDomainLookupByID(connection, vm_ids[i]);
-            if (!dom) break;
-            vm_info vm = get_vm_info(dom);
-            virDomainSetMemoryStatsPeriod(dom, config.interval, 0);
+            if (!dom) continue;
 
-            float used_percent = (float)(vm.actual - vm.available) / vm.actual;
+            virDomainSetMemoryStatsPeriod(dom, config.interval, 0);
+            vm_info vm = get_vm_info(dom);
+            if (!vm.actual || !vm.available || !vm.max ) {
+                virDomainFree(dom);
+                continue;
+            }
+
+            float used_percent = (float)(vm.max - vm.available) / vm.max;
             if (used_percent < config.low_threshold) {
                 virDomainSetMemory(dom, vm.actual - config.speed);
             } 
             else if (used_percent >= config.high_threshold) {
-                virDomainSetMemory(dom, vm.actual + config.speed);
+                virDomainSetMemory(dom, vm.actual + 2*config.speed);
             }
 
             fprintf(stdout, "[%s]: used:%ldMB | free: %ldMB | current: %ldMB | max: %ldMB | pressure: %.2f%%\n",
@@ -148,6 +152,7 @@ void ballooning() {
 
 int main() {
     create_file_if_not_exist();
+
     connection = virConnectOpen("qemu:///system");
     if (connection == NULL) {
         fprintf(stderr, "Failed to open connection to the hypervisor\n");
