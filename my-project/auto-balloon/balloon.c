@@ -1,3 +1,4 @@
+#include <time.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -12,10 +13,11 @@
 #include <libvirt/libvirt.h>
 
 #define MAX_VM_NAME_LENGTH 64
+#define MAX_NUM_OF_VM 1024
 
 #define CONFIG_LOW_THRESHOLD_DEFAULT 0.7
 #define CONFIG_HIGH_THRESHOLD_DEFAULT 0.85
-#define CONFIG_INTERVAL_DEFAULT (long int) 7
+#define CONFIG_INTERVAL_DEFAULT (long int) 5
 #define CONFIG_SPEED_DEFAULT (long int) (32 << 10)
 
 #define CONFIG_FILE "/etc/balloon/default.conf"
@@ -116,12 +118,13 @@ vm_info get_vm_info(virDomainPtr dom) {
 
 void ballooning() {
     balloon_config config;
-    int vm_ids[1024];
+    int vm_ids[MAX_NUM_OF_VM];
     int num_VMs, i;
+    char time_stamp[20];
 
     for (;;) {
         read_config(&config);
-        num_VMs = virConnectListDomains(connection, vm_ids, 1024);
+        num_VMs = virConnectListDomains(connection, vm_ids, MAX_NUM_OF_VM);
 
         for (i = 0; i < num_VMs; i++) {
             virDomainPtr dom = virDomainLookupByID(connection, vm_ids[i]);
@@ -144,6 +147,12 @@ void ballooning() {
 
             fprintf(stdout, "[%s]: used:%ldMB | free: %ldMB | current: %ldMB | max: %ldMB | pressure: %.2f%%\n",
                 virDomainGetName(dom), (vm.actual - vm.available) >> 10, vm.available >> 10, vm.actual >> 10, vm.max >> 10, used_percent * 100);
+
+            // strftime(time_stamp, sizeof(time_stamp), "%Y-%m-%d %H:%M:%S", localtime(&time(NULL)));
+
+            // fprintf(stdout, "timestamp=\"%s\" domain=\"%s\" free_memory_bytes=%ld current_memory_bytes=%ld max_memory_bytes=%ld memory_pressure=%.2f%%\n",
+            //     time_stamp, virDomainGetName(dom), vm.available << 10, vm.actual << 10, vm.max << 10, used_percent);
+
             virDomainFree(dom);
         }
         sleep(config.interval);
