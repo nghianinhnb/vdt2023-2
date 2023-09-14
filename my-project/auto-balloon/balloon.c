@@ -137,21 +137,21 @@ void ballooning() {
                 continue;
             }
 
-            float used_percent = (float)(vm.max - vm.available) / vm.max;
-            if (used_percent < config.low_threshold) {
+            float pressure = (float)(vm.max - vm.available) / vm.max;
+            if (pressure < config.low_threshold) {
                 virDomainSetMemory(dom, vm.actual - config.speed);
             } 
-            else if (used_percent >= config.high_threshold) {
+            else if (pressure >= config.high_threshold) {
                 virDomainSetMemory(dom, vm.actual + 2*config.speed);
             }
 
             fprintf(stdout, "[%s]: used:%ldMB | free: %ldMB | current: %ldMB | max: %ldMB | pressure: %.2f%%\n",
-                virDomainGetName(dom), (vm.actual - vm.available) >> 10, vm.available >> 10, vm.actual >> 10, vm.max >> 10, used_percent * 100);
+                virDomainGetName(dom), (vm.actual - vm.available) >> 10, vm.available >> 10, vm.actual >> 10, vm.max >> 10, pressure * 100);
 
             // strftime(time_stamp, sizeof(time_stamp), "%Y-%m-%d %H:%M:%S", localtime(&time(NULL)));
 
             // fprintf(stdout, "timestamp=\"%s\" domain=\"%s\" free_memory_bytes=%ld current_memory_bytes=%ld max_memory_bytes=%ld memory_pressure=%.2f%%\n",
-            //     time_stamp, virDomainGetName(dom), vm.available << 10, vm.actual << 10, vm.max << 10, used_percent);
+            //     time_stamp, virDomainGetName(dom), vm.available << 10, vm.actual << 10, vm.max << 10, pressure);
 
             virDomainFree(dom);
         }
