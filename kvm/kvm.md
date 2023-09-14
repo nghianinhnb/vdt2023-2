@@ -88,10 +88,10 @@ ram.
 
 ```console
 nghia@VTS-NGHIANV24:~$ sudo virt-install \
---name=vm1 \
+--name=vm2 \
 --vcpus=1 \
 --memory=2048 \
---cdrom=/media/nghia/Document/Downloads/ubuntu-22.04.2-live-server-amd64.iso \
+--cdrom=/home/nghia/Downloads/ubuntu-20.04.6-live-server-amd64.iso \
 --disk size=8
 
 Starting install...
