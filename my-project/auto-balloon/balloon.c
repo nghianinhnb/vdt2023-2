@@ -1,4 +1,3 @@
-#include <time.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -120,7 +119,6 @@ void ballooning() {
     balloon_config config;
     int vm_ids[MAX_NUM_OF_VM];
     int num_VMs, i;
-    char time_stamp[20];
 
     for (;;) {
         read_config(&config);
@@ -147,11 +145,6 @@ void ballooning() {
 
             fprintf(stdout, "[%s]: used:%ldMB | free: %ldMB | current: %ldMB | max: %ldMB | pressure: %.2f%%\n",
                 virDomainGetName(dom), (vm.actual - vm.available) >> 10, vm.available >> 10, vm.actual >> 10, vm.max >> 10, pressure * 100);
-
-            // strftime(time_stamp, sizeof(time_stamp), "%Y-%m-%d %H:%M:%S", localtime(&time(NULL)));
-
-            // fprintf(stdout, "timestamp=\"%s\" domain=\"%s\" free_memory_bytes=%ld current_memory_bytes=%ld max_memory_bytes=%ld memory_pressure=%.2f%%\n",
-            //     time_stamp, virDomainGetName(dom), vm.available << 10, vm.actual << 10, vm.max << 10, pressure);
 
             virDomainFree(dom);
         }
